@@ -1,1077 +1,1039 @@
-%% This is annot.tex.
-% * <ainilaha@gmail.com> 2018-02-15T19:12:38.986Z:
-%
-% ^.
-%% 
-%% You'll need to change the title and author fields to reflect your
-%% information.
-%%
-%% Author: Laha Ale, Scott King, Ning Zhang
-%% Homepage: http://www.barik.net/sw/ieee/
-%% Reference: http://www.ctan.org/tex-archive/info/simplified-latex/
-%% \documentclass [11pt]{article}
-%\documentclass[conference]{IEEEtran}
-
+% Working draft: the revised readout and warm-up are proposed, not yet tested.
+% Results are provisional working material for the latent-only control (PGND-0).
+% Select the legacy IEEE Times encoding before the class initializes its fonts.
+\RequirePackage[T1]{fontenc}
 \documentclass[journal,twoside]{IEEEtran}
-% \documentclass[journal,letterpaper,12pt,oneside,draftclsnofoot]{IEEEtran}
-\usepackage[hidelinks]{hyperref}
-\usepackage{xurl} % better URL line-breaking than url
-\usepackage{graphicx}
-\usepackage{subcaption}  % NOT subfigure
-\usepackage{romannum}
-\usepackage{empheq}
-\usepackage{amsmath}
-\usepackage{amsfonts}
-\usepackage{amssymb}
-\usepackage{amsthm}
-\usepackage{lipsum}
-\usepackage{caption}
-\usepackage{bm}
-\usepackage{mathtools}
+\usepackage{amsmath,amssymb,bm}
 \usepackage[noadjust]{cite}
-\usepackage{float}
-\usepackage{tikz}
-\usetikzlibrary{arrows.meta, positioning, fit, calc}
-
-\renewcommand{\citepunct}{,\penalty\citepunctpenalty\,}
-\DeclareMathOperator*{\argmax}{argmax}
-
 \usepackage[ruled,vlined]{algorithm2e}
-\usepackage[noend]{algpseudocode}
-\usepackage{romannum}
+\usepackage[hidelinks]{hyperref}
+\usepackage{xurl}
 
-\usepackage{color}
-\newcommand{\etal}{\textit{et al}.}
+\title{Physics-Guided Neural Dynamics for Pantograph--Catenary Contact Force Estimation}
 
-
-\title{Physics-Guided Neural Dynamics for Pantograph--Catenary Contact Force Reconstruction}
-
-\author {~Laha Ale,~\IEEEmembership{Senior~Member,~IEEE},~Yang Song,~\IEEEmembership{Senior~Member,~IEEE}, and ~Zhigang Liu,~\IEEEmembership{Life~Fellow,~IEEE}
- % \author {~Laha Ale,~Hu Luo,~Mingsheng Cao,~Shichao Li,~Huanlai Xing and~Haifeng Sun
-
-
-\thanks{L. Ale is with the School of Computing and Artificial Intelligence, Southwest Jiaotong University, Chengdu, China (e-mail:laha.ale@ieee.org).}%
-
-\thanks{Y. Song and Z. Liu are with School of Electrical Engineering, Southwest Jiaotong University, Chengdu, China (e-mail: y.song\_ac@hotmail.com; liuzg\_cd@126.com).}%
-
-\thanks{L. Ale and Y. Song are with the SWJTU-Leeds Joint School, Southwest Jiaotong University, Chengdu, China (e-mail:laha.ale@ieee.org; y.song\_ac@hotmail.com).}
-
-
-\thanks{\emph{Corresponding author: Yang Song (email: y.song\_ac@hotmail.com)}}
-
-
-% % \thanks{This work was partly supported by the Natural Science Foundation of China (No.62361016), the Sichuan Science and Technology Program (Grant No. 2025ZNSFSC0513), the scientific research project of China Academy of Railway Sciences Co., Ltd. (No. 2024YJ176 ) the Fundamental Research Funds for the Central Universities (2682024CX003) and the Bagui Youth Top Talent Project.}
-
- 
- }
-
-
-
-
+\author{Laha Ale,~\IEEEmembership{Senior~Member,~IEEE},
+Yang Song,~\IEEEmembership{Senior~Member,~IEEE},
+and Zhigang Liu,~\IEEEmembership{Life~Fellow,~IEEE}
+\thanks{L. Ale is with the School of Computing and Artificial Intelligence,
+Southwest Jiaotong University, Chengdu, China (e-mail: laha.ale@ieee.org).}
+\thanks{Y. Song and Z. Liu are with the School of Electrical Engineering,
+Southwest Jiaotong University, Chengdu, China (e-mail:
+y.song\_ac@hotmail.com; liuzg\_cd@126.com).}
+\thanks{L. Ale and Y. Song are with the SWJTU-Leeds Joint School,
+Southwest Jiaotong University, Chengdu, China (e-mail:
+laha.ale@ieee.org; y.song\_ac@hotmail.com).}
+\thanks{Corresponding author: Yang Song (e-mail: y.song\_ac@hotmail.com).}}
 
 \begin{document}
-
 \maketitle
 
 \begin{abstract}
-Accurate reconstruction of pantograph--catenary contact force is essential for evaluating current collection quality in high-speed railways, while its direct measurement typically requires specialised instrumented pantographs and is difficult to deploy in routine operation. Existing data-driven methods estimate contact force from readily measurable pantograph responses, such as panhead acceleration and uplift, but generally rely on fixed-length discrete-time mappings that do not explicitly represent the underlying continuous system dynamics. This paper proposes a physics-guided neural dynamics framework for reconstructing pantograph--catenary contact force from measurable dynamic responses. Instead of directly mapping a predefined observation window to contact force, the proposed method models the interaction as a continuous latent dynamical system, where neural differential dynamics capture unmodelled temporal behaviour while physical knowledge of the pantograph--catenary system guides the evolution of the latent state. The resulting state trajectory is decoded to reconstruct the contact-force time history. The proposed framework is evaluated using a validated pantograph--catenary numerical model under different catenary configurations, operating speeds, and signal bandwidths, and is compared with representative recurrent and convolutional--recurrent models. Experimental results show that [\textit{quantitative results to be added}], demonstrating improved contact-force reconstruction and robustness under varying operating and sensing conditions. These results establish physics-guided neural dynamics as a promising approach for continuous-time monitoring of pantograph--catenary interaction.
+Estimating pantograph--catenary contact force from panhead acceleration and
+uplift offers an alternative to direct force instrumentation. This work
+investigates physics-guided neural dynamics (PGND) using simulation data.
+The model evolves a latent configuration--velocity state with
+positive-semidefinite damping, an energy-derived restoring term,
+observation-conditioned driving, and a regularized neural residual.
+We propose an observation-conditioned readout combining a direct prediction
+from the latest available response with a correction decoded from the
+latent dynamics. The information budget is restricted to a finite
+observation history when predicting the next force sample. A causal warm-up
+initializer is formulated as a separate extension. The evaluation protocol
+specifies common recording-level test partitions, training-only scaling,
+and force-error metrics for PGND and recurrent baselines. Controlled
+ablations are designed to distinguish the effects of observation access,
+temporal context, and mechanical structure. Quantitative evaluation of the
+revised method remains pending; the present draft makes no claim of
+improved accuracy or robustness.
 \end{abstract}
 
-
-
 \begin{IEEEkeywords}
-Mobile Edge Computing,  Data Pruning, Edge Learning
+Pantograph--catenary interaction, contact force estimation,
+physics-guided learning, neural ordinary differential equations,
+simulation-based evaluation.
 \end{IEEEkeywords}
 \IEEEpeerreviewmaketitle
-\thispagestyle{plain} % <---- fixes page 1 number location
-\pagestyle{plain}    % ensures page numbers are printed
-\pagenumbering{arabic}   % use Arabic page numbers
-% 
+\thispagestyle{plain}
+\pagestyle{plain}
+
 \section{Introduction}
 \label{sec_intro}
 
-The pantograph--catenary system transfers electrical power from the overhead line to a moving train, and the quality of this transfer depends on maintaining stable mechanical and electrical contact at increasingly high operating speeds \cite{liu2024review,bruni2018interaction}. The dynamic contact force between the panhead and contact wire is therefore a principal indicator of current collection quality and is explicitly considered in the technical assessment of pantograph--overhead-line interaction \cite{en50367_2020,navik2017variation}. Excessive force fluctuations accelerate mechanical wear, whereas insufficient force can cause contact loss and arcing, with adverse consequences for power continuity and component life \cite{bruni2018interaction}. Reliable acquisition of the contact-force time history is consequently important for performance assessment, condition monitoring, and maintenance planning.
+The pantograph--catenary system transfers electrical power from the overhead
+line to a moving train. Its contact-force history is an important indicator
+of current collection quality and mechanical interaction
+\cite{liu2024review,bruni2018interaction,navik2017variation}.
+Excessive force fluctuations accelerate wear, whereas insufficient force
+can lead to contact loss and arcing \cite{bruni2018interaction}.
+Contact interaction is therefore considered in technical assessment
+procedures such as EN~50367 \cite{en50367_2020}.
 
-Direct contact-force measurement is, however, difficult to deploy in routine service. The procedure specified in EN~50317 requires an instrumented pantograph and combines measured support forces with panhead inertial and aerodynamic contributions \cite{en50317_2012}. Such arrangements require dedicated sensors, calibration, and structural modification of the panhead. By contrast, panhead acceleration and uplift are more readily acquired on operating vehicles and already contain information about the pantograph--catenary interaction \cite{carnevale2016processing,blanco2022panhead}. These practical advantages have motivated indirect estimation methods. For example, artificial neural networks have been used to infer contact-force statistics from panhead acceleration \cite{gregori2023assessment}; reconstructing the complete force trajectory would provide richer information for identifying transient impacts, contact loss, and other localized interaction events.
+Direct force measurement uses an instrumented pantograph and accounts for
+support forces and inertial and aerodynamic contributions
+\cite{en50317_2012}. Panhead acceleration and uplift provide alternative
+response measurements containing information about the coupled dynamics
+\cite{carnevale2016processing,blanco2022panhead}. Learning this relationship
+can support indirect force estimation; related work has also used
+acceleration to estimate contact-force statistics
+\cite{gregori2023assessment}.
 
-Deep sequence models provide a natural means of learning this nonlinear relationship from synchronized acceleration and uplift signals. In our previous study, RNN, LSTM, GRU, and CNN--GRU models were trained on data generated by a validated finite-element pantograph--catenary model spanning multiple catenary configurations, train speeds, and signal cut-off frequencies \cite{ale2026realtime}. The results demonstrated the feasibility of real-time contact-force reconstruction and showed that the CNN--GRU architecture generally achieved the best accuracy and consistency across speeds. They also exposed an important limitation: prediction accuracy degraded when the spectral characteristics of the test signals differed from those represented during training, particularly when a model trained on low-bandwidth data was applied to higher-bandwidth responses \cite{ale2026realtime}. The present study reuses that established database, allowing the effect of the new model formulation to be evaluated under the same controlled variations in infrastructure, operation, and sensing bandwidth.
+Our previous study investigated RNN, LSTM, GRU, and CNN--GRU predictors using
+responses generated by a numerical pantograph--catenary model
+\cite{ale2026realtime}. That study considered different catenary
+configurations, speeds, and filtering bandwidths. The present work reuses
+the available simulation files but adopts a documented, shared preprocessing
+and evaluation protocol. Because file handling, window boundaries, and
+normalization differ from the legacy implementation, the new scores are
+not presented as a reproduction of the published scores.
 
-Despite their effectiveness, these sequence models formulate reconstruction primarily as a discrete mapping from a fixed observation window to the force at one or more sampled instants \cite{ale2026realtime}. The system state and its evolution are encoded only implicitly in recurrent activations or convolutional features. Pantograph--catenary interaction, by contrast, is a continuous coupled mechanical process described by mass, damping, stiffness, and contact relations \cite{bruni2015benchmark,bruni2018interaction}. A fixed-window predictor may therefore learn accurate input--output correlations without preserving the dynamical structure that governs how the response evolves, which can contribute to sensitivity under changes in configuration, speed, or measurement bandwidth.
+Discrete sequence models can learn accurate response--force mappings
+without explicitly representing mechanical evolution. Neural ordinary
+differential equations (ODEs) instead parameterize a continuous vector field
+\cite{chen2018neuralode}. Their continuous-time representation does not,
+by itself, ensure physical consistency or superior prediction. Available
+mechanical knowledge can guide the vector field, following the broader
+principle of combining scientific structure with learning
+\cite{karniadakis2021physics}. The second-order mechanics suggest a
+configuration--velocity state, dissipative terms, and energy-derived
+restoring terms \cite{bruni2015benchmark,bruni2018interaction}.
+These provide an inductive bias, not an identified reduced-order model of
+the full pantograph--catenary system.
 
-Neural ordinary differential equations offer an alternative by parameterizing the derivative of a latent state and obtaining its trajectory through numerical integration \cite{chen2018neuralode}. Their continuous-time formulation is well suited to irregularly sampled or dynamically evolving observations, but a generic neural vector field is not guaranteed to respect basic mechanical properties such as dissipation or energy-derived restoring behavior. Physics-informed machine learning addresses this issue by embedding available scientific structure into trainable models while retaining data-driven flexibility for unresolved effects \cite{karniadakis2021physics}. For pantograph--catenary reconstruction, the established mechanical equations provide a natural basis for structuring the latent dynamics rather than treating the complete evolution as an unconstrained black box.
+The original PGND implementation routes all observation information through
+the latent dynamics before decoding force. Our preliminary comparison does
+not demonstrate an accuracy advantage over CNN--GRU. This motivates the
+testable hypothesis that a direct observation-conditioned prediction path
+can complement the latent dynamical representation. We therefore propose
+an additive readout and separately formulate initialization from a short
+available history. Neither modification is assumed to improve accuracy:
+direct-only and unstructured-ODE ablations are needed to determine whether
+any gain is attributable to mechanical structure.
 
-Motivated by these observations, this paper proposes a physics-guided neural dynamics framework for pantograph--catenary contact-force reconstruction. The proposed model evolves a continuous latent state through a structured vector field containing dissipative, energy-derived restoring, and observation-conditioned driving terms. A regularized neural residual represents dynamics not captured by the reduced mechanical structure, and a decoder maps the resulting latent trajectory to the contact-force time history. This formulation combines interpretable mechanical inductive biases with the flexibility required to represent complex and unmodelled interaction behavior.
-
-The main contributions of this paper are summarized as follows:
+The contributions and present scope of this draft are as follows:
 \begin{itemize}
-    \item A neural dynamics formulation is developed for pantograph--catenary contact force reconstruction, shifting the learning paradigm from fixed-window discrete sequence mapping toward explicit modeling of the underlying dynamical evolution.
-    
-    \item A physics-guided vector field is introduced in which positive-semidefinite dissipation, an energy-derived restoring term, and observation-conditioned driving describe the dominant latent dynamics, while a regularized neural residual captures unresolved effects.
-    
-    \item Using the database established in our previous study, the framework is evaluated under different catenary configurations, operating speeds, and signal bandwidths and compared with representative recurrent and convolutional--recurrent models.
+    \item A finite-history PGND formulation combines structured latent
+    dynamics with an observation-conditioned readout while excluding
+    target-time observations.
+    \item A causal warm-up initializer and standardized-force objective
+    are specified, with explicit limits on the physical interpretation of
+    latent energy and the two output branches.
+    \item A common simulation-data protocol and measured results for the
+    original formulation are reported. A staged validation and ablation
+    study is defined for the revision; its results remain pending.
 \end{itemize}
+The present work does not claim field validation, statistical superiority,
+unseen-speed robustness, or persistent-state streaming operation.
 
-
-
-% =========================
-% System Model
-% =========================
-\section{Pantograph--Catenary Dynamics and Problem Formulation}
+\section{Pantograph--Catenary System and Problem Formulation}
 \label{sec:system}
 
 \subsection{Pantograph--Catenary Dynamics}
+The simulation model described in our previous work represents the catenary
+using absolute nodal coordinate formulation (ANCF) elements and the
+pantograph using a lumped mass--spring--damper model, coupled through a
+penalty-based contact relation \cite{ale2026realtime}. Its validation against
+benchmark and field data is reported in that work; the files used here are
+simulation outputs, not field measurements.
 
-The pantograph--catenary system is a coupled mechanical system in which the
-pantograph travels along the contact wire while maintaining mechanical
-interaction with the catenary. The dynamic contact force generated at the
-pantograph--catenary interface depends on the coupled motion of the two
-subsystems and evolves continuously with the system state. In this work, we
-consider the pantograph--catenary model developed and validated in our previous
-study, which provides the physical basis for both the dynamic responses and
-the proposed physics-guided learning framework.
-
-The catenary is represented using a finite-element model. After assembling the
-element matrices and introducing the consistent mass and Rayleigh damping
-matrices, its global equation of motion is expressed as
+For an ANCF element, let $\chi\in[0,l_0]$ be the reference element
+coordinate and $\mathbf e(t)\in\mathbb R^{n_e}$ its generalized nodal
+coordinates, including the position and slope degrees of freedom. The
+shape matrix $\mathbf S(\chi)$ maps these coordinates to the spatial
+position $\mathbf r(\chi,t)$. Position and deformation energy are
+\begin{align}
+    \mathbf r(\chi,t) &= \mathbf S(\chi)\mathbf e(t),
+    \label{eq:ancf_position}\\
+    U(\mathbf e) &= \frac{1}{2}\int_0^{l_0}
+    \left(EA\varepsilon_l^2+EI\kappa^2\right)\,d\chi,
+    \label{eq:strain_energy}
+\end{align}
+where $E$, $A$, and $I$ denote elastic modulus, cross-sectional area, and
+second moment of area. Axial strain $\varepsilon_l$ and curvature $\kappa$
+depend on $\mathbf e$ through the spatial derivatives of
+$\mathbf r(\chi,t)$. The energy variation satisfies
+$\delta U=(\nabla_{\mathbf e}U)^{\mathrm T}\delta\mathbf e$; hence the
+elastic restoring term placed on the left-hand side of the equations of
+motion is
 \begin{equation}
-\begin{aligned}
-    \mathbf{M}_{C}^{G}\ddot{\mathbf{U}}_{C}(t)
-    +\mathbf{C}_{C}^{G}\dot{\mathbf{U}}_{C}(t)
-    +\mathbf{K}_{C}^{G}(t)\mathbf{U}_{C}(t)
-    =\mathbf{F}_{C}^{G}(t).
-\end{aligned}
-\label{eq:catenary_dynamics}
-\end{equation}
-Here, $\mathbf{M}_{C}^{G}$, $\mathbf{C}_{C}^{G}$, and
-$\mathbf{K}_{C}^{G}(t)$ denote the global mass, damping, and stiffness
-matrices of the catenary, respectively. $\mathbf{U}_{C}(t)$ is the global
-displacement vector, and $\mathbf{F}_{C}^{G}(t)$ is the corresponding
-external force vector.
-
-The pantograph is modeled as a lumped mass--spring--damper system and is
-dynamically coupled with the catenary through the moving contact point between
-the panhead and contact wire. Its dynamics can be generally represented as
-\begin{equation}
-\begin{aligned}
-    \mathbf{M}_{P}\ddot{\mathbf{U}}_{P}(t)
-    +\mathbf{C}_{P}\dot{\mathbf{U}}_{P}(t)
-    +\mathbf{K}_{P}\mathbf{U}_{P}(t)
-    =\mathbf{F}_{P}(t).
-\end{aligned}
-\label{eq:pantograph_dynamics}
-\end{equation}
-A penalty-based contact formulation is employed to describe the interaction
-between the pantograph and catenary and to determine the resulting contact
-force $F_c(t)$. Therefore, the contact force is not an independent quantity,
-but an outcome of the continuously evolving coupled dynamics. The same
-dynamic process simultaneously produces measurable pantograph responses,
-including panhead acceleration and uplift, providing the physical basis for
-reconstructing the contact force from these responses.
-
-\subsection{Contact Force Reconstruction}
-
-Let $a(t)$ and $u(t)$ denote the panhead acceleration and uplift,
-respectively. The observable response vector is defined as
-\begin{equation}
-    \mathbf{x}(t)
-    =
-    \left[
-    a(t),\,u(t)
-    \right]^{\mathrm T},
-    \label{eq:observation}
-\end{equation}
-and $F_c(t)$ denotes the corresponding pantograph--catenary contact force.
-
-For observations sampled at $\{t_k\}_{k=1}^{N}$, the reconstruction task can
-be generally expressed as
-\begin{equation}
-    \{\mathbf{x}(t_k)\}_{k=1}^{N}
-    \longrightarrow
-    \{F_c(t_k)\}_{k=1}^{N}.
-    \label{eq:reconstruction_task}
-\end{equation}
-
-Conventional sequence-learning approaches formulate this task as a
-discrete-time mapping from a fixed-length observation window to the contact
-force. Given $m$ historical observations, this mapping can be written as
-\begin{equation}
-\begin{aligned}
-    \hat{F}_{c}(t_k)
-    =
-    \mathcal{G}_{\theta}
-    \big(
-        \mathbf{x}(t_{k-m}),\ldots,
-        \mathbf{x}(t_{k-1})
-    \big),
-\end{aligned}
-\label{eq:discrete_mapping}
-\end{equation}
-where $\mathcal{G}_{\theta}$ denotes a parameterized sequence model. This
-formulation was adopted in our previous work using RNN, LSTM, GRU, and
-CNN--GRU models. Although these models can capture temporal correlations
-within the observation window, the evolution of the underlying physical
-system is represented only implicitly. Moreover, the temporal context is
-determined by the predefined window length $m$ rather than by the evolution
-of a dynamical state.
-
-\subsection{Problem Formulation}
-
-To explicitly represent the underlying temporal evolution, we formulate
-contact-force reconstruction as a continuous dynamical learning problem. Let
-$\mathbf{z}(t)$ denote a latent state that evolves according to the measured
-pantograph responses. Its general dynamics are represented as
-\begin{equation}
-\begin{aligned}
-    \dot{\mathbf{z}}(t)
-    =
-    \mathcal{F}_{\Theta}
-    \big(
-        \mathbf{z}(t),
-        \mathbf{x}(t),
-        t;
-        \mathcal{P}
-    \big),
-\end{aligned}
-\label{eq:general_dynamics}
-\end{equation}
-where $\mathcal{F}_{\Theta}$ denotes the learnable dynamics and
-$\mathcal{P}$ represents prior physical knowledge of the
-pantograph--catenary system.
-
-The contact force is reconstructed from the evolving latent state as
-\begin{equation}
-    \hat{F}_{c}(t)
-    =
-    \mathcal{H}_{\Phi}\big(\mathbf{z}(t)\big),
-    \label{eq:force_reconstruction}
-\end{equation}
-where $\mathcal{H}_{\Phi}$ denotes the reconstruction mapping. Given the
-measured response trajectory, the objective is to learn the model parameters
-such that the reconstructed force trajectory accurately approximates the
-reference contact force while remaining consistent with the underlying
-pantograph--catenary dynamics. The specific physics-guided neural dynamics
-used to achieve this objective are introduced in
-Section~\ref{sec:method}.
-
-
-\section{Physics-Guided Neural Dynamics}
-\label{sec:method}
-
-This section develops the proposed physics-guided neural dynamics framework
-for reconstructing pantograph--catenary contact force from measurable
-pantograph responses. The central idea is to retain the continuous-time and
-second-order structure of the original mechanical system while learning a
-low-dimensional dynamical representation from observations. Unlike a
-conventional Neural ODE that parameterizes the entire vector field using a
-neural network, the proposed model decomposes the latent vector field into
-structured mechanical dynamics and learnable residual dynamics. The complete
-framework therefore establishes an explicit connection between the
-full-order pantograph--catenary equations and the latent Neural ODE used for
-contact-force reconstruction.
-
-\subsection{From Full-Order Mechanical Dynamics to Latent Dynamics}
-\label{subsec:mechanical_latent}
-
-We first revisit the mechanical structure that motivates the proposed neural
-dynamics. In the finite-element model introduced in
-Section~\ref{sec:system}, the catenary is represented using ANCF beam
-elements. For each element, the global position is determined by the
-generalized coordinate vector $\mathbf{e}(t)$ as
-\begin{equation}
-    \mathbf{r}(\chi,t)
-    =
-    \mathbf{S}(\chi)\mathbf{e}(t),
-    \label{eq:ancf_position}
-\end{equation}
-where $\chi$ denotes the local coordinate and $\mathbf{S}(\chi)$ is the
-corresponding shape-function matrix.
-
-The generalized coordinates determine the axial strain
-$\varepsilon_l$ and curvature $\kappa$, and hence the deformation energy of
-the element. Following the mechanical formulation in our previous model, the
-strain energy is expressed as
-\begin{equation}
-\begin{aligned}
-    U(\mathbf{e})
-    =
-    \frac{1}{2}
-    \int_{0}^{l_0}
-    \left(
-        EA\varepsilon_l^2
-        +
-        EI\kappa^2
-    \right)d\chi ,
-\end{aligned}
-\label{eq:strain_energy}
-\end{equation}
-where $E$, $A$, and $I$ denote the elastic modulus, cross-sectional area,
-and moment of inertia, respectively.
-
-The generalized elastic force is obtained from the gradient of the
-deformation energy,
-\begin{equation}
-    \mathbf{Q}(\mathbf{e})
-    =
-    \frac{\partial U(\mathbf{e})}
-         {\partial \mathbf{e}},
+    \mathbf Q(\mathbf e)=\nabla_{\mathbf e}U(\mathbf e).
     \label{eq:generalized_force}
 \end{equation}
-which establishes the relation between system configuration and restoring
-force. After element assembly and the introduction of inertia, damping,
-external excitation, and pantograph--catenary contact, the coupled dynamics
-can be written in the general second-order form
-\begin{equation}
-\begin{aligned}
-    \mathbf{M}\ddot{\mathbf{U}}(t)
-    +\mathbf{C}\dot{\mathbf{U}}(t)
-    +\mathbf{Q}\big(\mathbf{U}(t)\big)
-    =
-    \mathbf{F}(t),
-\end{aligned}
-\label{eq:full_mechanical}
-\end{equation}
-where $\mathbf{U}(t)$ collects the generalized coordinates of the coupled
-system. The contact interaction is contained in the coupled force terms and
-produces the contact force $F_c(t)$ of interest.
+With this convention, the acceleration contains the negative energy
+gradient as its restoring contribution.
 
-Equation~\eqref{eq:full_mechanical} can equivalently be expressed as
+After assembly and treatment of constrained degrees of freedom, write the
+catenary and pantograph balances as
+\begin{align}
+    \mathbf M_C\ddot{\mathbf U}_C+
+    \mathbf C_C\dot{\mathbf U}_C+\mathbf Q_C(\mathbf U_C)
+    &=\mathbf F_C,
+    \label{eq:catenary_dynamics}\\
+    \mathbf M_P\ddot{\mathbf U}_P+
+    \mathbf C_P\dot{\mathbf U}_P+\mathbf K_P\mathbf U_P
+    &=\mathbf F_P.
+    \label{eq:pantograph_dynamics}
+\end{align}
+Here $\mathbf U_C\in\mathbb R^{n_C}$ and
+$\mathbf U_P\in\mathbb R^{n_P}$ contain the subsystem coordinates.
+Each mass, damping, or stiffness matrix has the corresponding square
+dimension. The catenary restoring vector $\mathbf Q_C$ is assembled from
+element energy gradients; it need not be a constant matrix times
+$\mathbf U_C$. The lumped pantograph uses a linear stiffness matrix
+$\mathbf K_P$ in this representation.
+
+The load vectors $\mathbf F_C$ and $\mathbf F_P$ include external loads
+and the contact interaction. The contact law determines the scalar force
+$F_c(t)$ from the coupled motion and applies opposite contact reactions to
+the two subsystems at the moving interface. Thus $F_c$ is an outcome of
+the coupled solution, not an independently prescribed input. We retain
+this general description because the available learning data do not
+provide the contact-law parameters or all internal simulator states.
+
+Stack the coordinates as
+$\mathbf U=[\mathbf U_C^{\mathrm T},\mathbf U_P^{\mathrm T}]^{\mathrm T}$,
+with dimension $n=n_C+n_P$. The assembled system then has the
+second-order form
+\begin{equation}
+    \mathbf M\ddot{\mathbf U}(t)+\mathbf C\dot{\mathbf U}(t)
+    +\mathbf Q(\mathbf U(t))=\mathbf F(t),
+    \label{eq:full_mechanical}
+\end{equation}
+where $\mathbf Q(\mathbf U)$ collects the restoring terms and
+$\mathbf F(t)$ is shorthand for the loads evaluated along the coupled
+trajectory. In particular, its contact contribution can depend on the
+system state as well as time. If the mass matrix on the free coordinates
+is nonsingular, multiplication by $\mathbf M^{-1}$ gives
 \begin{equation}
 \begin{aligned}
-    \ddot{\mathbf{U}}(t)
-    ={}&
-    -\mathbf{M}^{-1}\mathbf{C}\dot{\mathbf{U}}(t)\\
-    &-\mathbf{M}^{-1}
-    \mathbf{Q}\big(\mathbf{U}(t)\big)
-    +\mathbf{M}^{-1}\mathbf{F}(t).
+    \ddot{\mathbf U}(t)={}&-\mathbf M^{-1}\mathbf C\dot{\mathbf U}(t)
+    -\mathbf M^{-1}\mathbf Q(\mathbf U(t))\\
+    &+\mathbf M^{-1}\mathbf F(t).
 \end{aligned}
 \label{eq:full_acceleration}
 \end{equation}
-
-Defining the full-order mechanical state as
+To expose the connection with a first-order ODE, introduce the physical
+generalized velocity $\mathbf w=\dot{\mathbf U}$ and state
+$\mathbf y=[\mathbf U^{\mathrm T},\mathbf w^{\mathrm T}]^{\mathrm T}$.
+Then
 \begin{equation}
-    \mathbf{s}(t)
-    =
-    \left[
-        \mathbf{U}^{\mathrm T}(t),
-        \dot{\mathbf{U}}^{\mathrm T}(t)
-    \right]^{\mathrm T},
-    \label{eq:full_state}
+    \frac{d\mathbf y}{dt}=
+    \begin{bmatrix}
+        \mathbf w\\
+        -\mathbf M^{-1}\mathbf C\mathbf w
+        -\mathbf M^{-1}\mathbf Q(\mathbf U)
+        +\mathbf M^{-1}\mathbf F
+    \end{bmatrix}.
+    \label{eq:mechanical_first_order}
 \end{equation}
-the second-order mechanical system can be converted to the first-order
-continuous-time system
+The first block is kinematic; the second contains dissipation, restoring
+behavior, and driving. PGND borrows this separation, rather than solving
+the full finite-element equations. No calibrated mass, damping, stiffness,
+or finite-element state is supplied to the learning model. There is no
+known projection from $\mathbf y$ to its learned latent state, so the
+learned operators must not be identified with the physical matrices in
+\eqref{eq:full_mechanical}.
+
+\subsection{Available Observations and Target}
+Let the response and reference force at physical time $t_i$ be
 \begin{equation}
-    \dot{\mathbf{s}}(t)
-    =
-    \mathcal{F}_{\mathrm{mech}}
-    \big(
-        \mathbf{s}(t),\mathbf{F}(t)
-    \big).
-    \label{eq:full_first_order}
+    \mathbf x_i=[a(t_i),u(t_i)]^{\mathrm T},
+    \qquad F_i=F_c(t_i),
+    \label{eq:observation}
 \end{equation}
+where $a$ is panhead acceleration and $u$ is uplift. These are only two
+response channels of a much higher-dimensional mechanical state. In
+particular, they do not directly supply every velocity, deformation, or
+contact variable required to invert \eqref{eq:full_mechanical}. The
+learning problem is therefore a response-to-force prediction problem,
+not direct algebraic recovery of the complete physical state.
 
-This first-order representation is important because it establishes the
-direct conceptual connection between the mechanical model and a Neural ODE:
-both describe system evolution through a continuous-time vector field.
-
-Directly using $\mathbf{s}(t)$ in a learning model is, however, impractical.
-The finite-element state is high-dimensional and cannot be fully observed
-during normal operation. We therefore introduce a reduced latent mechanical
-state
+For a recording with $N$ samples, an eligible target index $k$ has
+$m\leq k\leq N-1$. Its input--target pair is
 \begin{equation}
-    \mathbf{z}(t)
-    =
-    \left[
-        \mathbf{q}^{\mathrm T}(t),
-        \mathbf{v}^{\mathrm T}(t)
-    \right]^{\mathrm T}
-    \in\mathbb{R}^{2d},
-    \label{eq:latent_state}
+    \mathbf X_k=
+    \begin{bmatrix}
+        \mathbf x_{k-m}^{\mathrm T}\\[-1mm]
+        \vdots\\[-1mm]
+        \mathbf x_{k-1}^{\mathrm T}
+    \end{bmatrix}\in\mathbb R^{m\times2},
+    \qquad y_k=F_k.
+    \label{eq:window_pair}
 \end{equation}
-where $\mathbf{q}(t)\in\mathbb{R}^{d}$ is a latent generalized
-configuration and $\mathbf{v}(t)\in\mathbb{R}^{d}$ is its corresponding
-latent velocity. Their kinematic relation is explicitly preserved as
+Within a single window, we relabel these times locally as
+$t_0<\cdots<t_{m-1}<t_m$. The $m$ observations
+$\mathbf x_0,\ldots,\mathbf x_{m-1}$ are available when the prediction is
+issued; $F_m$ is its target. Every compared predictor follows the mapping
 \begin{equation}
-    \dot{\mathbf{q}}(t)
-    =
-    \mathbf{v}(t).
-    \label{eq:latent_kinematics}
+    \hat F_m=\mathcal P_\Theta(\mathbf x_0,\ldots,\mathbf x_{m-1};
+    t_0,\ldots,t_m).
+    \label{eq:discrete_mapping}
 \end{equation}
+where $\Theta$ denotes the model parameters and the sampling schedule is
+known. Neither $\mathbf x_m$ nor any force-history input is available at
+inference. The reference force $F_m$ is used only as a training label or
+evaluation reference. For uniform sampling with interval $\Delta t$, the
+observed history spans $(m-1)\Delta t$ and the forecast horizon is
+$\Delta t$; the interval from the first observation to the target is
+$m\Delta t$. For example, $m=16$ and $\Delta t=1$~ms give a 15-ms observed
+span followed by a 1-ms prediction interval.
 
-The latent state is not intended to reproduce individual finite-element
-degrees of freedom. Instead, it provides a low-dimensional representation of
-the dynamically relevant state required to explain the observed pantograph
-responses and reconstruct the contact force.
+Windows are constructed within one recording and one data partition.
+Changing their stride changes the selected targets, not the spacing of
+the $m$ observations inside each window. PGND and the recurrent baselines
+reset their states for each window. Consequently, this is finite-history,
+one-step-ahead estimation, not contemporaneous reconstruction or
+unlimited-history streaming. A reconstructed force curve is assembled from
+successive window predictions, not from a single persistent latent rollout.
 
-
-\subsection{Observation Encoding and Continuous-Time Representation}
-\label{subsec:observation}
-
-The complete state $\mathbf{s}(t)$ in
-\eqref{eq:full_first_order} is unavailable during operation. Instead, the
-measurable quantities are the panhead acceleration $a(t)$ and uplift $u(t)$.
-As defined in Section~\ref{sec:system}, the observation vector is
+\subsection{Training-Only Standardization}
+Let $\mathcal R_{\mathrm{tr}}$ contain the retained training-row indices
+$(r,k)$, with $r$ identifying the recording, and let
+$N_{\mathrm{tr}}=|\mathcal R_{\mathrm{tr}}|$. For each scalar channel
+$\xi\in\{a,u,F\}$, compute the population statistics
+\begin{align}
+    \mu_\xi&=\frac{1}{N_{\mathrm{tr}}}
+        \sum_{(r,k)\in\mathcal R_{\mathrm{tr}}}\xi_{r,k},
+        \label{eq:training_mean}\\
+    s_\xi^2&=\frac{1}{N_{\mathrm{tr}}}
+        \sum_{(r,k)\in\mathcal R_{\mathrm{tr}}}
+        (\xi_{r,k}-\mu_\xi)^2.
+        \label{eq:training_variance}
+\end{align}
+The implemented divisor is $\sigma_\xi=\max(s_\xi,10^{-12})$ to avoid
+division by zero. Means and scales are fitted once on training rows,
+before constructing overlapping windows, rather than separately per
+window or with repeated rows counted multiple times. Define
+$\bm\mu_x=[\mu_a,\mu_u]^{\mathrm T}$ and
+$\bm\sigma_x=[\sigma_a,\sigma_u]^{\mathrm T}$. The model receives
 \begin{equation}
-    \mathbf{x}(t)
-    =
-    \left[
-        a(t),u(t)
-    \right]^{\mathrm T}.
-    \label{eq:method_observation}
+    \tilde{\mathbf x}_i=(\mathbf x_i-\bm\mu_x)\oslash\bm\sigma_x,
+    \qquad \tilde F_i=(F_i-\mu_F)/\sigma_F,
+    \label{eq:standardization}
 \end{equation}
+where $\oslash$ is element-wise division. The same frozen statistics are
+used for all validation and test windows and for every compared model.
+Force predictions are transformed back to the original force scale before
+reporting errors. Partitions are defined before scaling and window
+construction, as detailed in Section~\ref{sec:experiments}; validation or
+test targets do not enter \eqref{eq:training_mean} or
+\eqref{eq:training_variance}.
 
-For a measured sequence
-$\{\mathbf{x}(t_k)\}_{k=0}^{N}$, an observation encoder first maps each
-measurement into a $d_e$-dimensional representation,
-\begin{equation}
-    \mathbf{h}_k
-    =
-    \mathcal{E}_{\psi}
-    \big(
-        \mathbf{x}(t_k)
-    \big),
-    \qquad
-    \mathbf{h}_k\in\mathbb{R}^{d_e},
-    \label{eq:observation_encoder}
-\end{equation}
-where $\mathcal{E}_{\psi}$ is a learnable encoder with parameters $\psi$.
+\section{Observation-Conditioned Physics-Guided Neural Dynamics}
+\label{sec:method}
 
-A Neural ODE requires its input-dependent vector field to be evaluable at
-continuous times, whereas $\mathbf{h}_k$ is available only at measurement
-instants. We therefore construct a continuous observation path
-$\mathbf{h}(t)$ from the encoded measurements,
-\begin{equation}
-    \mathbf{h}(t)
-    =
-    \mathcal{I}
-    \left(
-        \{t_k,\mathbf{h}_k\}_{k=0}^{N}
-    \right),
-    \label{eq:continuous_observation}
-\end{equation}
-where $\mathcal{I}(\cdot)$ denotes a continuous interpolation operator.
+The revision retains the structured dynamics and changes the readout.
+We call the implemented latent-only control \emph{PGND-0}; the additive
+readout below defines the proposed \emph{observation-conditioned PGND}.
+Warm-up initialization is a separate extension, not a prerequisite for
+testing the readout.
 
-For example, under piecewise-linear interpolation, for
-$t\in[t_k,t_{k+1}]$,
+For each window, the model encodes the responses, initializes a latent
+state, integrates its dynamics, and decodes the target force. Both readout
+branches use the same encoded observations. The learned parameters are
+shared across windows; the initial state and trajectory are window-specific.
+
+\subsection{Latent Coordinates and Time Scale}
+Define neural solver time and latent state by
 \begin{equation}
 \begin{aligned}
-    \mathbf{h}(t)
-    ={}&
-    (1-\rho)\mathbf{h}_k
-    +
-    \rho\mathbf{h}_{k+1},\\
-    \rho
-    ={}&
-    \frac{t-t_k}{t_{k+1}-t_k}.
+    \tau_i&=(t_i-t_0)/t_{\mathrm{unit}},\\
+    \mathbf z(\tau)&=[\mathbf q(\tau)^{\mathrm T},
+                      \mathbf v(\tau)^{\mathrm T}]^{\mathrm T}.
+\end{aligned}
+\label{eq:latent_state}
+\end{equation}
+The constant $t_{\mathrm{unit}}>0$ converts physical seconds to
+dimensionless solver time, with $\tau_0=0$ in every window.
+Here $\mathbf q,\mathbf v\in\mathbb R^d$ and
+$\mathbf z\in\mathbb R^{2d}$. The configuration-like coordinates
+$\mathbf q$ represent learned information about the response history;
+their velocity-like partners are defined by
+\begin{equation}
+    \frac{d\mathbf q}{d\tau}=\mathbf v.
+    \label{eq:latent_kinematics}
+\end{equation}
+All latent derivatives below are with respect to $\tau$, not physical
+time $t$. The chain rule makes the distinction explicit:
+\begin{equation}
+    \frac{d\mathbf q}{dt}=\frac{\mathbf v}{t_{\mathrm{unit}}},
+    \qquad
+    \frac{d^2\mathbf q}{dt^2}=
+    \frac{1}{t_{\mathrm{unit}}^2}\frac{d\mathbf v}{d\tau}.
+    \label{eq:time_conversion}
+\end{equation}
+The reference implementation uses $t_{\mathrm{unit}}=10^{-3}$~s; a
+physical sampling interval of 1~ms therefore corresponds to
+$\Delta\tau=1$. The variable $\mathbf v$ is latent displacement per
+solver-time unit, not measured panhead velocity, and neither latent block
+is assigned a calibrated physical unit. A different time scale changes
+the numerical vector field and regularization balance, so it must be held
+fixed or explicitly accounted for in comparisons.
+
+\subsection{Observation Encoding and Interpolation}
+\label{subsec:observation}
+A shared encoder maps each available standardized observation to
+\begin{equation}
+    \mathbf h_i=\mathcal E_\psi(\tilde{\mathbf x}_i)
+    \in\mathbb R^{d_e},\qquad i=0,\ldots,m-1.
+    \label{eq:observation_encoder}
+\end{equation}
+We use a two-layer multilayer perceptron (MLP), with hidden width $w$:
+\begin{equation}
+    \mathcal E_\psi(\mathbf s)=
+    \mathbf W_{E,2}\tanh(\mathbf W_{E,1}\mathbf s+\mathbf b_{E,1})
+    +\mathbf b_{E,2}.
+    \label{eq:encoder_mlp}
+\end{equation}
+Here $\mathbf W_{E,1}\in\mathbb R^{w\times2}$,
+$\mathbf W_{E,2}\in\mathbb R^{d_e\times w}$, and the biases have
+dimensions $w$ and $d_e$. The nonlinearity acts element-wise, and the
+output layer is linear. Encoding is pointwise: $\mathbf h_i$ depends only
+on $\tilde{\mathbf x}_i$, with temporal processing performed by the ODE.
+The initializer, residual, and readout MLPs below use the same
+affine--tanh--affine pattern with different input and output dimensions.
+
+An ODE solver evaluates the vector field between observation times, so
+the discrete encodings must define a continuous input path.
+The observation path is linearly interpolated within the available history:
+\begin{equation}
+\begin{aligned}
+    \mathbf h(\tau)&=(1-\rho)\mathbf h_i+\rho\mathbf h_{i+1},\\
+    \rho&=\frac{\tau-\tau_i}{\tau_{i+1}-\tau_i},
+    \quad \tau\in[\tau_i,\tau_{i+1}],
 \end{aligned}
 \label{eq:linear_interpolation}
 \end{equation}
+for $i=0,\ldots,m-2$. Over the unobserved prediction interval, use
+\begin{equation}
+    \mathbf h(\tau)=\mathbf h_{m-1},
+    \qquad \tau\in[\tau_{m-1},\tau_m].
+    \label{eq:continuous_observation}
+\end{equation}
+Both interpolation endpoints in \eqref{eq:linear_interpolation} are
+available when the prediction is issued at $t_{m-1}$. This is compatible
+with the finite-history task, but does not establish zero-delay estimation
+at every internal integration time. No interpolation uses $\mathbf x_m$.
+Causality of the upstream filters that generated the spreadsheets is not
+established by this rule.
 
-This construction separates the measurement grid from the internal
-continuous-time evolution of the latent state. The ODE solver can therefore
-evaluate the dynamical vector field at intermediate times required by its
-numerical integration scheme.
+Interpolation is performed on the encoded vectors, not on raw responses
+before encoding. Since $\mathcal E_\psi$ is nonlinear, these operations
+are generally not interchangeable. Holding the final encoding is an
+explicit boundary rule for the one-step prediction interval; it does not
+assume that the physical responses actually remain constant.
 
-
-\subsection{Latent-State Initialization}
+\subsection{Initialization and Optional Causal Warm-Up}
 \label{subsec:initialization}
-
-Solving a Neural ODE requires an initial latent state
-$\mathbf{z}(t_0)$. Since the physical finite-element state is not directly
-available, the initial latent state is inferred from the initial observation.
-
-The initial configuration and velocity states are generated by an
-initialization network,
+Choose an initialization index $K_0$ with $0\leq K_0\leq m-2$ and set
 \begin{equation}
-\begin{aligned}
-    \mathbf{z}(t_0)
-    &=
-    \mathcal{E}_{0}
-    \big(
-        \mathbf{x}(t_0)
-    \big)\\
-    &=
-    \left[
-        \mathbf{q}^{\mathrm T}(t_0),
-        \mathbf{v}^{\mathrm T}(t_0)
-    \right]^{\mathrm T},
-\end{aligned}
-\label{eq:initial_state}
+    \mathbf z(\tau_{K_0})=
+    \mathcal E_{0,\omega}
+    (\tilde{\mathbf x}_0,\ldots,\tilde{\mathbf x}_{K_0}).
+    \label{eq:initial_state}
 \end{equation}
-where $\mathcal{E}_{0}$ denotes a learnable initialization mapping.
-
-When a short initial observation interval is available,
-$\mathcal{E}_{0}$ can alternatively operate on multiple initial
-measurements rather than a single sample. This allows the initial latent
-velocity and dynamical phase to be inferred more reliably without requiring
-direct observation of the full mechanical state.
-
-
-\subsection{Neural ODE Formulation}
-\label{subsec:node}
-
-Given the continuous observation path $\mathbf{h}(t)$ and the initial state
-$\mathbf{z}(t_0)$, a generic observation-conditioned Neural ODE describes the
-latent evolution as
+More explicitly, the initializer receives the concatenated vector
 \begin{equation}
-    \dot{\mathbf{z}}(t)
-    =
-    f_{\Theta}
-    \left(
-        \mathbf{z}(t),
-        \mathbf{h}(t),
-        t
-    \right),
-    \label{eq:generic_node}
+    \mathbf s_{K_0}=
+    [\tilde{\mathbf x}_0^{\mathrm T},\ldots,
+     \tilde{\mathbf x}_{K_0}^{\mathrm T}]^{\mathrm T}
+    \in\mathbb R^{2(K_0+1)}
+    \label{eq:initializer_input}
 \end{equation}
-where $f_{\Theta}$ is the ODE vector field parameterized by $\Theta$.
+and maps it to $2d$ unconstrained coordinates, split into
+$\mathbf q(\tau_{K_0})$ and $\mathbf v(\tau_{K_0})$.
+Neither block is obtained by differentiating the measured uplift; the
+initializer learns a state useful for predicting force under the chosen
+latent dynamics.
 
-The solution at time $t$ satisfies
-\begin{equation}
-\begin{aligned}
-    \mathbf{z}(t)
-    =
-    \mathbf{z}(t_0)
-    +
-    \int_{t_0}^{t}
-    f_{\Theta}
-    \left(
-        \mathbf{z}(\tau),
-        \mathbf{h}(\tau),
-        \tau
-    \right)d\tau .
-\end{aligned}
-\label{eq:node_integral}
-\end{equation}
+PGND-0 and the first readout-only comparison use $K_0=0$, matching the
+implemented single-observation initializer. The warm-up extension uses
+$K_0+1$ initial observations, concatenated and mapped by a small MLP.
+Integration begins at $\tau_{K_0}$, not at an earlier time whose initial
+state would then depend on later observations. Warm-up observations are
+part of the same $m$-sample budget, not additional data. No state is
+carried across windows or recording boundaries.
 
-In practice, this integral is evaluated numerically. Denoting an ODE solver
-by $\operatorname{ODESolve}(\cdot)$, the state at the next observation time
-is obtained as
-\begin{equation}
-\begin{aligned}
-    \mathbf{z}(t_{k+1})
-    =
-    \operatorname{ODESolve}
-    \Big(
-        f_{\Theta},
-        \mathbf{z}(t_k),
-        [t_k,t_{k+1}],
-        \mathbf{h}(t)
-    \Big).
-\end{aligned}
-\label{eq:ode_solver}
-\end{equation}
+Warm-up length remains to be selected using a predeclared validation-only
+candidate set. Its benefit is untested, and the latent state is not assumed
+to be uniquely recoverable from the available responses.
 
-Equation~\eqref{eq:ode_solver} highlights a fundamental difference from the
-discrete recurrent formulation in Section~\ref{sec:system}. An RNN or GRU
-directly updates its hidden state from index $k$ to $k+1$, whereas the Neural
-ODE defines a continuous vector field and obtains the next state by
-integrating that field over the actual time interval
-$\Delta t_k=t_{k+1}-t_k$.
-
-However, directly parameterizing the complete vector field
-$f_{\Theta}$ as an unconstrained neural network would discard the known
-mechanical structure derived in
-\eqref{eq:full_acceleration}. We therefore replace the generic vector field
-with the proposed physics-guided neural vector field.
-
-
-\subsection{Physics-Guided Neural Vector Field}
+\subsection{Structured Vector Field}
 \label{subsec:physics_guided}
-
-The full-order acceleration in \eqref{eq:full_acceleration} contains three
-principal mechanical components: velocity-dependent dissipation,
-configuration-dependent restoring force, and external/contact excitation.
-We preserve this decomposition in the reduced latent space while introducing
-a neural residual to account for dynamics that cannot be represented by the
-reduced model.
-
-The proposed latent dynamics are
+Following the kinematic/acceleration split in
+\eqref{eq:mechanical_first_order}, the latent dynamics are
 \begin{equation}
 \begin{aligned}
-    \dot{\mathbf{q}}(t)
-        &=\mathbf{v}(t),\\
-    \dot{\mathbf{v}}(t)
-        &=
-        -\mathbf{D}_{\alpha}\mathbf{v}(t)
-        -\mathbf{g}_{\beta}\big(\mathbf{q}(t)\big)\\
-        &\quad
-        +\mathbf{B}_{\gamma}\mathbf{h}(t)
-        +\mathbf{r}_{\theta}(t).
-\end{aligned}
-\label{eq:physics_guided_dynamics}
-\end{equation}
-
-Each term in \eqref{eq:physics_guided_dynamics} has a specific role. The
-operator $\mathbf{D}_{\alpha}$ represents effective dissipation in the
-reduced space. The function
-$\mathbf{g}_{\beta}(\mathbf{q})$ represents the restoring dynamics associated
-with the latent configuration. The term
-$\mathbf{B}_{\gamma}\mathbf{h}(t)$ conditions the latent evolution on the
-measured pantograph responses. Finally,
-$\mathbf{r}_{\theta}(t)$ represents the learnable residual dynamics.
-
-Importantly, $\mathbf{B}_{\gamma}\mathbf{h}(t)$ should not be interpreted as
-the physical external force $\mathbf{F}(t)$ in
-\eqref{eq:full_mechanical}. Acceleration and uplift are measured responses,
-rather than externally applied forces. This term instead provides
-observation-conditioned dynamical information required to infer the
-unobserved system evolution from available measurements.
-
-
-\subsection{Energy-Structured Restoring Dynamics}
-\label{subsec:energy}
-
-The restoring component is further constrained using the energy structure of
-the original ANCF formulation. In the full-order model, the generalized
-elastic force is obtained from the deformation energy according to
-\eqref{eq:generalized_force}. We preserve the same principle in the reduced
-latent space by introducing a latent potential energy
-\begin{equation}
-    V_{\beta}
-    =
-    V_{\beta}\big(\mathbf{q}(t)\big),
-    \label{eq:latent_potential}
-\end{equation}
-where $V_{\beta}$ is a differentiable scalar-valued function.
-
-Instead of learning an arbitrary vector-valued restoring function, the
-restoring dynamics are defined by the gradient of the latent potential:
-\begin{equation}
-    \mathbf{g}_{\beta}(\mathbf{q})
-    =
-    \nabla_{\mathbf{q}}
-    V_{\beta}(\mathbf{q}).
-    \label{eq:potential_gradient}
-\end{equation}
-
-This construction mirrors the full-order relationship
-\begin{equation}
-    \mathbf{Q}(\mathbf{U})
-    =
-    \nabla_{\mathbf{U}}
-    U(\mathbf{U}),
-    \label{eq:full_energy_relation}
-\end{equation}
-but operates in a reduced latent space. The correspondence between the two
-levels can therefore be summarized as
-\begin{equation}
-\begin{aligned}
-    U(\mathbf{U})
-        &\longrightarrow V_{\beta}(\mathbf{q}),\\
-    \nabla_{\mathbf{U}}U
-        &\longrightarrow
-        \nabla_{\mathbf{q}}V_{\beta}.
-\end{aligned}
-\label{eq:energy_correspondence}
-\end{equation}
-
-For a quadratic latent potential,
-\begin{equation}
-    V_{\beta}(\mathbf{q})
-    =
-    \frac{1}{2}
-    \mathbf{q}^{\mathrm T}
-    \mathbf{K}_{\beta}
-    \mathbf{q},
-    \label{eq:quadratic_potential}
-\end{equation}
-the restoring term reduces to
-\begin{equation}
-    \mathbf{g}_{\beta}(\mathbf{q})
-    =
-    \mathbf{K}_{\beta}\mathbf{q},
-    \label{eq:linear_restoring}
-\end{equation}
-which corresponds to the familiar stiffness form. A nonlinear
-$V_{\beta}(\mathbf{q})$, however, allows the reduced model to represent
-nonlinear restoring behavior while retaining the energy-gradient structure.
-
-\subsection{Dissipative Structure and Neural Residual}
-\label{subsec:residual}
-
-In addition to the energy-gradient restoring structure introduced above, the
-latent dynamics should preserve the dissipative nature of the underlying
-mechanical system. To this end, the effective damping operator is constrained
-to be positive semidefinite through
-\begin{equation}
-    \mathbf{D}_{\alpha}
-    =
-    \mathbf{L}_{D}\mathbf{L}_{D}^{\mathrm T}
-    \succeq 0,
-    \label{eq:damping_constraint}
-\end{equation}
-where $\mathbf{L}_{D}\in\mathbb{R}^{d\times d}$ is learnable. This
-parameterization guarantees that the structured damping component cannot
-introduce negative dissipation into the latent dynamics.
-
-To make this property explicit, we consider the structured component of the
-latent dynamics before introducing observation-conditioned driving and neural
-residual correction:
-\begin{equation}
-\begin{aligned}
-    \dot{\mathbf{q}}(t)
-        &= \mathbf{v}(t),\\
-    \dot{\mathbf{v}}(t)
-        &= -\mathbf{D}_{\alpha}\mathbf{v}(t)
-        -\nabla_{\mathbf q}V_{\beta}
-        \big(\mathbf q(t)\big).
-\end{aligned}
-\label{eq:unforced_structured_dynamics}
-\end{equation}
-Here, the latent coordinates are taken to be mass-normalized, such that the
-effective latent mass matrix is the identity matrix. The corresponding latent
-mechanical energy can therefore be defined as
-\begin{equation}
-\begin{aligned}
-    \mathcal{E}(t)
-    =
-    \frac{1}{2}
-    \mathbf{v}^{\mathrm T}(t)\mathbf{v}(t)
-    +
-    V_{\beta}\big(\mathbf q(t)\big),
-\end{aligned}
-\label{eq:latent_energy}
-\end{equation}
-where the first term represents the latent kinetic energy and
-$V_{\beta}(\mathbf q)$ is the latent potential energy introduced in
-Section~\ref{subsec:energy}.
-
-Taking the time derivative of \eqref{eq:latent_energy} along the trajectory
-of \eqref{eq:unforced_structured_dynamics} gives
-\begin{equation}
-\begin{aligned}
-    \dot{\mathcal{E}}(t)
-    ={}&
-    \mathbf{v}^{\mathrm T}(t)
-    \dot{\mathbf{v}}(t) \\
-    &+
-    \nabla_{\mathbf q}V_{\beta}
-    \big(\mathbf q(t)\big)^{\mathrm T}
-    \dot{\mathbf q}(t).
-\end{aligned}
-\label{eq:energy_derivative}
-\end{equation}
-Substituting \eqref{eq:unforced_structured_dynamics} into
-\eqref{eq:energy_derivative} yields
-\begin{equation}
-\begin{aligned}
-    \dot{\mathcal{E}}(t)
-    &=
-    -\mathbf{v}^{\mathrm T}(t)
-    \mathbf{D}_{\alpha}
-    \mathbf{v}(t)\\
-    &=
-    -\left\|
-    \mathbf{L}_{D}^{\mathrm T}
-    \mathbf{v}(t)
-    \right\|_2^2
-    \leq 0.
-\end{aligned}
-\label{eq:energy_dissipation}
-\end{equation}
-Therefore, in the absence of observation-conditioned driving and residual
-dynamics, the latent mechanical energy is non-increasing. This property
-provides a direct physical interpretation of
-\eqref{eq:damping_constraint}: the structured latent system preserves the
-dissipative behavior expected from the damping mechanism of the original
-pantograph--catenary dynamics.
-
-The structured dynamics alone, however, are not expected to reproduce the
-complete pantograph--catenary interaction. First, the low-dimensional latent
-state necessarily discards part of the information contained in the
-full-order finite-element system. Second, nonlinear contact behavior,
-parameter uncertainty, unobserved disturbances, and other modeling
-discrepancies cannot in general be represented exactly by the reduced
-energy--dissipation structure. We therefore introduce a neural residual
-\begin{equation}
-\begin{aligned}
-    \mathbf{r}_{\theta}(t)
-    =
-    f_{\theta}
-    \left(
-        \mathbf{q}(t),
-        \mathbf{v}(t),
-        \mathbf{h}(t),
-        t
-    \right),
-\end{aligned}
-\label{eq:neural_residual}
-\end{equation}
-where $f_{\theta}$ is a neural network parameterized by $\theta$. Rather than
-learning the entire latent vector field, $f_{\theta}$ is responsible only for
-correcting the discrepancy between the structured reduced dynamics and the
-dynamics required by the observations.
-
-Combining the structured dynamics with the observation-conditioned term and
-the neural residual gives the complete physics-guided Neural ODE:
-\begin{equation}
-\begin{aligned}
-    \dot{\mathbf q}(t)
-        &= \mathbf v(t),\\
-    \dot{\mathbf v}(t)
-        &=
-        -\mathbf{D}_{\alpha}\mathbf v(t)
-        -\nabla_{\mathbf q}V_{\beta}
-        \big(\mathbf q(t)\big)\\
-        &\quad
-        +\mathbf{B}_{\gamma}\mathbf h(t)
-        +\mathbf r_{\theta}(t).
+    \frac{d\mathbf q}{d\tau}&=\mathbf v,\\
+    \frac{d\mathbf v}{d\tau}&=-\mathbf D_\alpha\mathbf v
+    -\nabla_{\mathbf q}V_\beta(\mathbf q)\\
+    &\quad+\mathbf B_\gamma\mathbf h(\tau)
+    +\mathbf r_\theta(\tau),
 \end{aligned}
 \label{eq:final_pgnd}
 \end{equation}
-The four components of the acceleration-like latent dynamics have distinct
-roles: $-\mathbf{D}_{\alpha}\mathbf v$ represents dissipative dynamics,
-$-\nabla_{\mathbf q}V_{\beta}$ represents energy-derived restoring dynamics,
-$\mathbf{B}_{\gamma}\mathbf h(t)$ injects information from the measured
-pantograph responses, and $\mathbf r_{\theta}(t)$ accounts for dynamics not
-captured by the structured reduced model.
+All four terms in the second equation are $d$-dimensional.
+The matrices $\mathbf D_\alpha\in\mathbb R^{d\times d}$ and
+$\mathbf B_\gamma\in\mathbb R^{d\times d_e}$ act on velocity and encoded
+observations, respectively. The scalar function
+$V_\beta:\mathbb R^d\to\mathbb R$ determines the restoring term.
+The remaining nonlinear correction is
+\begin{equation}
+    \mathbf r_\theta(\tau)=f_\theta
+    (\mathbf q(\tau),\mathbf v(\tau),\mathbf h(\tau),\tau).
+    \label{eq:neural_residual}
+\end{equation}
+Here $f_\theta:\mathbb R^{2d+d_e+1}\to\mathbb R^d$ is an MLP acting
+on the concatenation of its arguments; its final scalar input is the
+window-relative time $\tau$. The term $-\mathbf D_\alpha\mathbf v$
+damps the latent velocity, $-\nabla_{\mathbf q}V_\beta$ generates
+restoring dynamics, and $\mathbf r_\theta$ supplies a flexible correction
+to this restricted structure. The identity $d\mathbf q/d\tau=\mathbf v$
+is imposed exactly at the vector-field level, not learned by a separate
+network or encouraged through a loss penalty.
 
-The influence of these components can also be characterized through the
-latent energy balance. Taking the derivative of
-\eqref{eq:latent_energy} along the complete dynamics in
-\eqref{eq:final_pgnd} gives
+The term $\mathbf B_\gamma\mathbf h$ conditions the state on measured
+responses. It is not a physical external force: acceleration and uplift
+are responses of the coupled system rather than applied excitations.
+
+\subsection{Damping, Potential, and Latent Energy Balance}
+\label{subsec:energy}
+Use positive-semidefinite damping and a quadratic latent potential:
+\begin{align}
+    \mathbf D_\alpha&=\mathbf L_D\mathbf L_D^{\mathrm T}\succeq0,
+    \label{eq:damping_constraint}\\
+    V_\beta(\mathbf q)&=\tfrac12\mathbf q^{\mathrm T}\mathbf K_\beta\mathbf q,
+    \quad \mathbf K_\beta=\mathbf L_K\mathbf L_K^{\mathrm T}\succeq0,
+    \label{eq:quadratic_potential}\\
+    \nabla_{\mathbf q}V_\beta(\mathbf q)
+    &=\tfrac12(\mathbf K_\beta+\mathbf K_\beta^{\mathrm T})\mathbf q
+    =\mathbf K_\beta\mathbf q.
+    \label{eq:linear_restoring}
+\end{align}
+The factors $\mathbf L_D,\mathbf L_K\in\mathbb R^{d\times d}$ are
+unconstrained trainable matrices; they need not be triangular. For any
+$\boldsymbol\xi\in\mathbb R^d$,
+\begin{equation}
+    \boldsymbol\xi^{\mathrm T}\mathbf D_\alpha\boldsymbol\xi
+    =\|\mathbf L_D^{\mathrm T}\boldsymbol\xi\|_2^2\geq0,
+    \label{eq:damping_psd_proof}
+\end{equation}
+and the same argument applies to $\mathbf K_\beta$. Consequently,
+$V_\beta(\mathbf q)=\tfrac12\|\mathbf L_K^{\mathrm T}\mathbf q\|_2^2$
+is bounded below by zero. Symmetry is what reduces its gradient to
+$\mathbf K_\beta\mathbf q$ in \eqref{eq:linear_restoring}. The restoring
+term therefore requires only a matrix--vector product, while gradients
+can still propagate to both $\mathbf q$ and $\mathbf L_K$.
+
+The quadratic potential preserves the implemented structural core; it
+does not imply that the complete model is linear, because the encoder,
+neural residual, initializer, and readouts are nonlinear. A nonlinear
+potential is not introduced simultaneously with the new readout, so that
+their effects are not confounded.
+
+For the latent energy-like quantity
+\begin{equation}
+    \mathcal E(\tau)=\tfrac12\mathbf v^{\mathrm T}\mathbf v
+    +V_\beta(\mathbf q),
+    \label{eq:latent_energy}
+\end{equation}
+the chain rule gives
+\begin{equation}
+    \frac{d\mathcal E}{d\tau}
+    =\mathbf v^{\mathrm T}\frac{d\mathbf v}{d\tau}
+    +(\nabla_{\mathbf q}V_\beta)^{\mathrm T}
+      \frac{d\mathbf q}{d\tau}.
+    \label{eq:energy_chain_rule}
+\end{equation}
+Substitution of \eqref{eq:final_pgnd} yields
 \begin{equation}
 \begin{aligned}
-    \dot{\mathcal{E}}(t)
-    ={}&
-    -\mathbf v^{\mathrm T}(t)
-    \mathbf D_{\alpha}\mathbf v(t)\\
-    &+
-    \mathbf v^{\mathrm T}(t)
-    \mathbf B_{\gamma}\mathbf h(t)\\
-    &+
-    \mathbf v^{\mathrm T}(t)
-    \mathbf r_{\theta}(t).
+    \frac{d\mathcal E}{d\tau}
+    ={}&-\mathbf v^{\mathrm T}\mathbf D_\alpha\mathbf v
+         -\mathbf v^{\mathrm T}\nabla_{\mathbf q}V_\beta\\
+       &+\mathbf v^{\mathrm T}\mathbf B_\gamma\mathbf h
+         +\mathbf v^{\mathrm T}\mathbf r_\theta
+         +(\nabla_{\mathbf q}V_\beta)^{\mathrm T}\mathbf v.
 \end{aligned}
-\label{eq:complete_energy_rate}
+    \label{eq:energy_substitution}
 \end{equation}
-Equation~\eqref{eq:complete_energy_rate} separates the rate of change of
-latent energy into three interpretable contributions. The first term is
-non-positive and represents dissipation, the second represents the
-contribution associated with observation-conditioned driving, and the third
-quantifies the energetic contribution of the learned residual dynamics.
-Consequently, the structured component possesses an explicit dissipative
-property, while deviations from this passive evolution arise only through
-the measured-response conditioning and the learned residual correction.
-
-To prevent the neural residual from overwhelming the structured dynamics,
-its magnitude is regularized during training:
+The two potential-gradient terms are equal scalars with opposite signs
+and cancel. Thus the full continuous-time balance becomes
 \begin{equation}
-    \mathcal{L}_{\mathrm{res}}
-    =
-    \frac{1}{N}
-    \sum_{k=1}^{N}
-    \left\|
-        \mathbf r_{\theta}(t_k)
-    \right\|_2^2.
-    \label{eq:residual_loss}
+    \frac{d\mathcal E}{d\tau}
+    =-\mathbf v^{\mathrm T}\mathbf D_\alpha\mathbf v
+    +\mathbf v^{\mathrm T}\mathbf B_\gamma\mathbf h
+    +\mathbf v^{\mathrm T}\mathbf r_\theta.
+    \label{eq:complete_energy_rate}
 \end{equation}
-This regularization encourages the energy-structured component to explain the
-dominant latent evolution while retaining sufficient flexibility for the
-neural residual to capture systematic discrepancies that cannot be described
-by the reduced mechanical representation.
+With the observation-conditioned and residual terms removed,
+\begin{equation}
+    \frac{d\mathcal E}{d\tau}
+    =-\|\mathbf L_D^{\mathrm T}\mathbf v\|_2^2\leq0.
+    \label{eq:energy_dissipation}
+\end{equation}
+This establishes non-increasing energy only for the unforced latent
+subsystem. The two driving contributions in
+\eqref{eq:complete_energy_rate} can have either sign, and semidefinite
+matrices may have null directions; decay of every coordinate is not
+guaranteed. The identity neither proves stability of the driven model nor
+identifies physical pantograph energy. The unit-mass convention is a
+latent modeling choice, not a calibrated physical mass normalization.
+Finally, this continuous-time identity does not guarantee the same
+behavior after discretization; numerical integration error must be checked.
 
-
-\subsection{Contact-Force Reconstruction}
+\subsection{Evolution and Force Readout}
 \label{subsec:force_reconstruction}
-
-After integrating \eqref{eq:final_pgnd}, the ODE solver provides the latent
-states at the measurement times,
+Let $f_{\mathrm{PGND}}$ denote the complete $2d$-dimensional vector field
+in \eqref{eq:final_pgnd}. Given the initialized state and the known encoded
+path, its trajectory satisfies the integral equation
 \begin{equation}
-    \left\{
-        \mathbf{z}(t_k)
-    \right\}_{k=0}^{N}.
-    \label{eq:latent_trajectory}
+\begin{aligned}
+    \mathbf z(\tau)={}&\mathbf z(\tau_{K_0})\\
+    &+\int_{\tau_{K_0}}^{\tau}
+    f_{\mathrm{PGND}}(\mathbf z(s),\mathbf h(s),s)\,ds,
+    \quad \tau_{K_0}\leq\tau\leq\tau_m.
+\end{aligned}
+    \label{eq:node_integral}
 \end{equation}
-
-A force decoder maps each latent state to the corresponding reconstructed
-contact force,
+The solver evaluates $\mathbf h(s)$ by
+\eqref{eq:linear_interpolation}--\eqref{eq:continuous_observation},
+including at internal integration stages. Numerically, the target state is
 \begin{equation}
-    \hat{F}_{c}(t_k)
-    =
-    \mathcal{H}_{\phi}
-    \left(
-        \mathbf{z}(t_k)
-    \right),
+\begin{aligned}
+    \mathbf z_m=\operatorname{ODESolve}\big(&f_{\mathrm{PGND}},
+    \mathbf z(\tau_{K_0}),\\
+    &[\tau_{K_0},\tau_m],\mathbf h\big).
+\end{aligned}
+    \label{eq:ode_solver}
+\end{equation}
+The reference solver is fixed-step, fourth-order Runge--Kutta (RK4).
+Its step size $\delta\tau$ is distinct from the observation spacing
+$\tau_{i+1}-\tau_i$, although both are 1 in the reference configuration.
+The last integration interval still evolves the state using its damping,
+restoring, and residual terms; holding the input does not freeze the
+state. With $K_0=0$ and $m=16$, the solve covers $\tau=0$ through
+$\tau=16$, including the final interval from 15 to 16.
+
+The original readout uses only this state,
+\begin{equation}
+    \hat{\tilde F}^{(0)}_m=\mathcal H_\phi(\mathbf z_m).
+    \label{eq:latent_only_decoder}
+\end{equation}
+where $\mathcal H_\phi:\mathbb R^{2d}\to\mathbb R$ is a scalar decoder.
+The proposed readout adds a direct observation-conditioned predictor
+$\mathcal G_\eta:\mathbb R^{d_e}\to\mathbb R$:
+\begin{equation}
+    \hat{\tilde F}_m=
+    \underbrace{\mathcal G_\eta(\mathbf h_{m-1})}_{\text{direct prediction}}
+    +\underbrace{\mathcal H_\phi(\mathbf z_m)}_{\text{latent correction}},
     \label{eq:force_decoder}
 \end{equation}
-where $\mathcal{H}_{\phi}$ is a learnable decoder parameterized by $\phi$.
-
-The complete forward process can therefore be summarized as
+with physical force given by
 \begin{equation}
-\begin{aligned}
-    \mathbf{x}(t_k)
-    &\xrightarrow{\mathcal{E}_{\psi}}
-    \mathbf{h}_k
-    \xrightarrow{\mathcal{I}}
-    \mathbf{h}(t)\\
-    &\xrightarrow{\mathrm{PGND\text{-}ODE}}
-    \mathbf{z}(t_k)
-    \xrightarrow{\mathcal{H}_{\phi}}
-    \hat{F}_{c}(t_k).
-\end{aligned}
-\label{eq:complete_pipeline}
+    \hat F_m=\mu_F+\sigma_F\hat{\tilde F}_m.
+    \label{eq:force_reconstruction}
 \end{equation}
+Both branches predict the same next-sample standardized force from
+information available by $t_{m-1}$. The direct branch does not use a
+measured force or the unavailable $\mathbf x_m$. Its purpose is to test
+whether retaining a direct response--force mapping helps while the latent
+path represents history-dependent effects.
 
-This differs fundamentally from the fixed-window mapping
-$\mathcal{G}_{\theta}$ introduced in
-Section~\ref{sec:system}. Historical information is retained through the
-evolution of $\mathbf{z}(t)$ rather than being repeatedly presented as a
-fixed-length observation window.
+The ODE residual $\mathbf r_\theta$ and the output correction
+$\mathcal H_\phi$ have different roles: the former changes a
+$d$-dimensional state derivative, whereas the latter contributes one
+scalar to the predicted standardized force. Neither is a directly measured
+physical force component. The two readout branches are learned jointly;
+for any constant $c$, replacing $\mathcal G_\eta$ by
+$\mathcal G_\eta+c$ and $\mathcal H_\phi$ by
+$\mathcal H_\phi-c$ leaves the sum unchanged. Thus even their offsets are
+not separately identifiable from force supervision, and the direct branch
+could dominate the prediction.
+Consequently, an accuracy gain over PGND-0 is insufficient evidence for the
+value of physics guidance. The direct-only and unstructured-ODE controls
+in Section~\ref{sec:planned} are essential.
 
-
-
+For the initial revision, retain $d=d_e=16$ and hidden width $w=32$. The encoder
+is a $2\!\to\!32\!\to\!16$ tanh MLP, the state decoder is
+$32\!\to\!32\!\to\!1$, and the proposed direct branch is
+$16\!\to\!32\!\to\!1$. Hidden layers use tanh and outputs are linear.
+The residual MLP is $49\!\to\!32\!\to\!16$; its final layer is initialized
+to zero in PGND-0. The candidate warm-up initializer has dimensions
+$2(K_0+1)\!\to\!32\!\to\!32$. These are explicit candidate settings,
+not established optima. The revised parameter count and initialization
+details must be recorded when it is implemented.
 
 \subsection{Learning Objective}
 \label{subsec:objective}
-
-The principal objective is accurate reconstruction of the contact-force
-trajectory. The reconstruction loss is defined as
+Let $j=1,\ldots,B$ index the windows in a minibatch, each with its own
+initialized state and observation path. Supervise only the final
+next-sample force:
 \begin{equation}
-    \mathcal{L}_{\mathrm{rec}}
-    =
-    \frac{1}{N}
-    \sum_{k=1}^{N}
-    \left|
-        F_c(t_k)-\hat{F}_c(t_k)
-    \right|^2.
+    \mathcal L_{\mathrm{rec}}=\frac1B\sum_{j=1}^{B}
+    (\tilde F^{(j)}_m-\hat{\tilde F}^{(j)}_m)^2.
     \label{eq:reconstruction_loss}
 \end{equation}
-
-Although the neural residual improves model flexibility, an unconstrained
-residual could dominate the structured component and reduce the proposed
-model to an effectively black-box Neural ODE. We therefore regularize its
-magnitude as
+The reference label and prediction in each term refer to the same target
+row, not to the last observed row. The intermediate states are not
+supervised by a measured latent trajectory, and decoding them does not
+create additional force-training targets. Because
+$F_m-\hat F_m=\sigma_F(\tilde F_m-\hat{\tilde F}_m)$, the corresponding
+minibatch force MSE in original units is
 \begin{equation}
-    \mathcal{L}_{\mathrm{res}}
-    =
-    \frac{1}{N}
-    \sum_{k=1}^{N}
-    \left\|
-        \mathbf{r}_{\theta}(t_k)
-    \right\|_2^2.
+    \mathrm{MSE}_{\mathrm{force}}=\sigma_F^2\mathcal L_{\mathrm{rec}}.
+    \label{eq:loss_units}
+\end{equation}
+This relation allows standardized training curves and force errors in
+newtons to be distinguished without changing the prediction task.
+
+Regularize the residual at evolved sample times, excluding the initial state:
+\begin{equation}
+    \mathcal L_{\mathrm{res}}=
+    \frac{1}{B(m-K_0)}\sum_{j=1}^{B}\sum_{i=K_0+1}^{m}
+    \|\mathbf r^{(j)}_\theta(\tau_i)\|_2^2.
     \label{eq:residual_loss}
 \end{equation}
-
-The overall objective is
+In each summand,
+$\|\mathbf r_\theta\|_2^2=\sum_{\ell=1}^d r_{\theta,\ell}^2$;
+the norm sums over latent components, rather than averaging over them.
+The outer factors average over $B$ windows and the $m-K_0$ evolved
+observation/target times. These are the sample-grid states, not the
+internal RK4 stages. At $i=m$, the residual uses the held encoding
+$\mathbf h_{m-1}$. This is the implemented discrete penalty, not a
+time-weighted integral; irregular sampling would require a separately
+declared weighting rule. The total objective is
 \begin{equation}
-    \mathcal{L}
-    =
-    \mathcal{L}_{\mathrm{rec}}
-    +
-    \lambda_{\mathrm{res}}
-    \mathcal{L}_{\mathrm{res}},
+    \mathcal L=\mathcal L_{\mathrm{rec}}
+    +\lambda_{\mathrm{res}}\mathcal L_{\mathrm{res}},
     \label{eq:total_loss}
 \end{equation}
-where $\lambda_{\mathrm{res}}$ controls the contribution of the neural
-residual regularization.
-
-The parameters
+with trainable parameters
 \begin{equation}
-    \Theta
-    =
-    \{
-        \psi,\,
-        \mathcal{E}_{0},\,
-        \mathbf{L}_{D},\,
-        \beta,\,
-        \gamma,\,
-        \theta,\,
-        \phi
-    \}
+    \Theta=\{\psi,\omega,\mathbf L_D,\mathbf L_K,
+    \mathbf B_\gamma,\theta,\phi,\eta\}.
     \label{eq:trainable_parameters}
 \end{equation}
-are optimized jointly through end-to-end training. Gradients of the loss are
-propagated through the force decoder and the numerical ODE solution to the
-parameters defining the continuous vector field.
+All parameters are learned jointly using Adam and direct automatic
+differentiation through the numerical ODE solution. To describe this
+dependency, let $\mathbf z_{\ell+1}=\Phi_\ell(\mathbf z_\ell;\Theta)$
+be one numerical solver step, with $\ell$ indexing integration steps
+rather than observation samples. The map $\Phi_\ell$ includes the
+parameter-dependent encoded input at each stage. If
+$\mathbf S_\ell=\partial\mathbf z_\ell/\partial\Theta$, the chain rule is
+\begin{equation}
+    \mathbf S_{\ell+1}=
+    \frac{\partial\Phi_\ell}{\partial\mathbf z_\ell}\mathbf S_\ell
+    +\frac{\partial\Phi_\ell}{\partial\Theta}.
+    \label{eq:solver_gradient}
+\end{equation}
+The initial sensitivity comes from the initializer. Reverse-mode autograd
+applies the chain rule without forming full sensitivity matrices. It
+reaches the encoder through both the input path and direct readout, and
+the damping/stiffness factors through their matrix products. Gradients
+are those of the discretized RK4 solve, not a continuous-adjoint solver.
 
-Consequently, the proposed framework learns not only a mapping from measured
-responses to contact force, but a continuous latent dynamical system whose
-structure is explicitly linked to the mechanics of pantograph--catenary
-interaction.
+The reference residual weight is $\lambda_{\mathrm{res}}=10^{-3}$ for
+standardized force MSE. If the same objective were expressed using raw
+force MSE while retaining the same latent penalty, its residual weight
+would need to be multiplied by $\sigma_F^2$. Reusing the same numerical
+weight would change the trade-off. Likewise, changing the latent dimension,
+latent scale, or solver-time scale can change the penalty magnitude.
+The penalty discourages large latent corrections but does not guarantee
+that the mechanical terms dominate or that the energy rate is negative.
+No physical force-balance or latent-trajectory supervision loss is added.
+
+For fair model selection, validation uses the force-prediction term alone,
+averaged over all validation targets, with the training scalers frozen.
+The proposed best-validation rule is
+\begin{equation}
+    e^*=\underset{1\leq e\leq E_{\max}}{\operatorname{arg\,min}}
+    \mathcal L_{\mathrm{rec,val}}(\Theta_e),
+    \label{eq:validation_selection}
+\end{equation}
+where $e$ is the epoch and $E_{\max}$ the preset epoch budget. The residual
+penalty is excluded from this selection metric because the recurrent
+baselines do not have a corresponding latent term. Test targets are never
+used for gradient updates or checkpoint selection. This rule is proposed
+for the revised experiments, not claimed for the existing final-epoch runs.
 
 \begin{algorithm}[t]
-\caption{Training of the Proposed Physics-Guided Neural Dynamics}
+\caption{Training and Validation of Proposed PGND}
 \label{alg:pgnd}
-
-\KwIn{
-$\{\mathbf{x}_k,t_k,F_{c,k}\}_{k=0}^{N}$,
-initialization length $K_0$,
-and $\lambda_{\mathrm{res}}$
-}
-\KwOut{Trained parameters $\Theta$}
-
-Initialize model parameters $\Theta$\;
-
-\ForEach{training sequence}{
-    $\mathbf{h}_k \leftarrow
-    \mathcal{E}_{\psi}(\mathbf{x}_k)$,
-    $k=0,\ldots,N$\;
-
-    Construct continuous $\mathbf{h}(t)$
-    using \eqref{eq:continuous_observation}\;
-
-    $\mathbf{z}_{K_0}
-    \leftarrow
-    \mathcal{E}_{0}
-    (\mathbf{x}_0,\ldots,\mathbf{x}_{K_0})$\;
-
-    \For{$k\leftarrow K_0$ \KwTo $N-1$}{
-        Evaluate $f_{\mathrm{PGND}}$
-        using \eqref{eq:final_pgnd}\;
-
-        $\mathbf{z}_{k+1}
-        \leftarrow
-        \operatorname{ODESolve}
-        (f_{\mathrm{PGND}},
-        \mathbf{z}_{k},
-        [t_k,t_{k+1}],
-        \mathbf{h}(t))$\;
-
-        $\hat{F}_{c,k+1}
-        \leftarrow
-        \mathcal{H}_{\phi}(\mathbf{z}_{k+1})$\;
+\KwIn{Row-disjoint training/validation data; $m$, $K_0$,
+$\lambda_{\mathrm{res}}$; epoch budget $E_{\max}$}
+\KwOut{Best-validation and final-epoch checkpoints}
+Fit scaling on training rows only; freeze all statistics\;
+Initialize $\Theta$; set best validation MSE to $+\infty$\;
+\For{$e=1,\ldots,E_{\max}$}{
+    \ForEach{minibatch of recording-local training windows}{
+        Encode $\tilde{\mathbf x}_{0:m-1}$ by
+        \eqref{eq:observation_encoder}\;
+        Interpolate available history; hold $\mathbf h_{m-1}$
+        over the final interval\;
+        Initialize $\mathbf z(\tau_{K_0})$ using
+        \eqref{eq:initial_state}\;
+        Solve \eqref{eq:final_pgnd} to $\tau_m$\;
+        Predict $\hat{\tilde F}_m$ with \eqref{eq:force_decoder}\;
+        Compute \eqref{eq:total_loss}, backpropagate, and update $\Theta$\;
     }
-
-    Compute $\mathcal{L}_{\mathrm{rec}}$
-    using \eqref{eq:reconstruction_loss}\;
-
-    Compute $\mathcal{L}_{\mathrm{res}}$
-    using \eqref{eq:residual_loss}\;
-
-    $\mathcal{L}
-    \leftarrow
-    \mathcal{L}_{\mathrm{rec}}
-    +\lambda_{\mathrm{res}}
-    \mathcal{L}_{\mathrm{res}}$\;
-
-    Update $\Theta$ by backpropagating through
-    the ODE solution\;
+    Compute validation MSE with parameters frozen\;
+    Save improving checkpoint; append epoch history\;
 }
-
-\Return{$\Theta$}\;
-
+Save final-epoch checkpoint separately\;
 \end{algorithm}
 
+Algorithm~\ref{alg:pgnd} specifies the proposed selection procedure.
+The completed experiment saved final-epoch weights only; its results
+are not retrospectively relabeled as best-validation results.
+
+\section{Simulation Protocol and Provisional Results}
+\label{sec:experiments}
+
+\noindent\emph{Working-draft status: the result table and its interpretation
+are provisional material for organizing the experiments. The retained
+numbers are existing latent-only PGND-0 reference runs, not results for
+the revised method. They must be replaced or expanded by the planned
+controlled evaluation before final conclusions are written.}
+
+\subsection{Dataset Provenance and Partitions}
+The available collection contains 120 headerless, four-column XLS files:
+eight case labels, speeds 300/350/380~km/h, and cutoff labels
+20/50/100/150/200~Hz. The previous paper describes 96 groups at four cutoffs
+\cite{ale2026realtime}; the imported collection additionally contains
+100-Hz files. Three older XLSX files have a different layout and are not
+combined with this collection. The case labels follow the supplied files;
+their exact physical configuration mapping must be confirmed before
+configuration-specific conclusions are drawn.
+
+The completed comparison uses only the 20-Hz files: cases 1--6 at all
+three speeds form the training/validation pool, and cases 7--8 at those
+same speeds form the test set. Thus all three speeds occur in training;
+this is not unseen-speed extrapolation. Each file contains distance,
+acceleration, uplift, and contact force. Distance increments and filename
+speeds imply approximately 1-ms sampling under constant-speed and unit
+assumptions. Explicit timestamps and filter-generation code are not
+available, so timing provenance and filter causality remain qualifications.
+
+The common preprocessing procedure is:
+\begin{enumerate}
+    \item Read all numeric rows without interpreting the first row as a
+    header. Trim 10\% of each recording at each end; reject non-finite data.
+    \item Reserve the final 15\% of retained rows of each training-pool
+    recording for validation. Entire test recordings remain separate.
+    \item Fit feature-wise population means and standard deviations, and
+    force scaling, using training rows only.
+    \item Construct windows independently within each recording and row
+    partition. No observation or target crosses a partition boundary.
+\end{enumerate}
+No additional filter is applied. Training and validation share recording
+identities, but not rows; temporal correlation can remain. The supplied
+cutoff variants affect both inputs and force targets and must not be
+treated as input-noise variants with a common unfiltered ground truth.
+
+With $m=16$, training target stride 16, and validation/test stride 1, the
+completed experiment has 12,126 training, 33,983 validation, and 69,909 test
+windows. Every input still contains 16 contiguous observations. The
+training stride reduces the number of supervised targets; it is not a
+claim of using every eligible training window.
+
+The legacy loader discarded the first numeric row, joined recordings
+before windowing, fitted a scaler without using its transformed values,
+and partitioned overlapping windows. The revised handling above is common
+to all models and changes the experimental protocol. Consequently, these
+are internal comparisons, not direct comparisons with the earlier
+paper's numerical scores.
+
+\subsection{Implemented Models and Training Settings}
+The PyTorch RNN, LSTM, and GRU baselines each contain two 32-unit recurrent
+layers and a scalar linear output. CNN--GRU adds a 64-channel, width-1
+ReLU convolution before two 32-unit GRU layers. The width-1 convolution
+mixes channels at each time instant; it is not a temporal smoothing
+filter. All models are unidirectional and reset at each window.
+Their trainable parameter counts are 3,233, 12,833, 9,825, and 15,969,
+respectively. PGND-0 contains 5,761 trainable parameters. The recurrent
+architectures follow the legacy configurations, but framework and
+initialization differences preclude bitwise Keras reproduction.
+
+The completed comparison uses seed 0, 100 epochs, batch size 128, and Adam
+with learning rate $10^{-3}$, $(\beta_1,\beta_2)=(0.9,0.999)$ and
+$\epsilon=10^{-7}$. Models share the same seeded training-window order.
+There is no early stopping, scheduler, clipping, weight decay, or dropout.
+PGND-0 uses $K_0=0$, the latent-only readout
+\eqref{eq:latent_only_decoder}, and $\lambda_{\mathrm{res}}=10^{-3}$.
+Its damping and stiffness factors start at $0.1\mathbf I$, giving
+$\mathbf D=\mathbf K=0.01\mathbf I$. All scores below use final-epoch
+weights; equal epochs do not imply equal runtime or equal tuning budgets.
+
+\subsection{Metrics and Provisional Reference Results}
+For $n$ common test targets in newtons, define
+\begin{align}
+    \mathrm{MAE}&=\frac1n\sum_{j=1}^n|F_j-\hat F_j|,\\
+    \mathrm{MSE}&=\frac1n\sum_{j=1}^n(F_j-\hat F_j)^2,\\
+    \mathrm{RMSE}&=\sqrt{\mathrm{MSE}},\qquad
+    R^2=1-\frac{\sum_j(F_j-\hat F_j)^2}
+                  {\sum_j(F_j-\bar F)^2}.
+\end{align}
+MAE and RMSE have units N, MSE has units N$^2$, and $R^2$ is undefined
+for constant targets. Table~\ref{tab:preliminary} reports the completed
+single-seed comparison. It contains no results for the proposed additive
+readout or warm-up extension.
+
+\begin{table}[t]
+\caption{Provisional 20-Hz reference results: 100 epochs, seed 0,
+final-epoch weights, and 69,909 common test targets. PGND-0 denotes the
+original latent-only model, not the proposed revision.}
+\label{tab:preliminary}
+\centering
+\begin{tabular}{lrrr}
+\hline
+Model & MAE (N) & RMSE (N) & $R^2$\\
+\hline
+LSTM & 9.227 & 12.279 & 0.8911\\
+GRU & 9.659 & 12.731 & 0.8829\\
+RNN & 9.884 & 13.100 & 0.8760\\
+CNN--GRU & 9.073 & 12.141 & 0.8935\\
+PGND-0 & 9.385 & 12.591 & 0.8855\\
+\hline
+\end{tabular}
+\end{table}
+
+PGND-0 has approximately 3.7\% higher RMSE than CNN--GRU and higher RMSE
+on each of the six test recordings. These results do not establish an
+accuracy advantage from physics guidance. PGND-0's minimum validation MSE
+was 0.06275 at epoch 91, whereas its final validation MSE was 0.07264,
+both in standardized-force units. Since intermediate weights were not
+saved, that history cannot establish the test score of the best-validation
+checkpoint. The same limitation applies to the baseline histories.
+
+PGND-0 training and per-epoch validation took 1,056.7~s in total (median
+10.52~s per epoch) on an NVIDIA RTX 3080 Ti with PyTorch 2.8.0+cu128 and
+\texttt{torchdiffeq} 0.2.5. This is not per-sample inference latency or a
+real-time deployment benchmark. The completed recurrent baseline runs were
+substantially faster. Execution optimizations cached invariant matrices
+within each ODE solve and reduced transfers/synchronizations, without
+changing the mathematical model. Training-time differences still need to
+be reported alongside accuracy in future comparisons.
+
+\section{Controlled Evaluation of the Proposed Revision}
+\label{sec:planned}
+
+The following experiments are planned, not completed. The current dataset
+and measured PGND-0 results remain the development benchmark. The aim is
+to distinguish architectural effects rather than assume that additional
+complexity improves prediction.
+
+\subsection{Staged Comparisons}
+First, implement best-validation checkpoint saving for every model and
+retain final weights separately, as in Algorithm~\ref{alg:pgnd}. Use
+validation force MSE, not the PGND regularized training objective, for
+selection. The first architectural comparison changes only the readout,
+retaining $m=16$, $K_0=0$, the quadratic potential, solver, and reference
+training settings.
+
+The minimum controls are:
+\begin{enumerate}
+    \item \emph{PGND-0}: latent-only readout, reproducing the original
+    architectural control under the new common checkpoint-selection rule.
+    \item \emph{Observation-conditioned PGND}: the additive readout
+    \eqref{eq:force_decoder} with otherwise unchanged dynamics.
+    \item \emph{Direct-only predictor}: the same encoder and
+    $\mathcal G_\eta(\mathbf h_{m-1})$, with no ODE or latent correction.
+    This intentionally uses only the latest observation; it isolates the
+    added prediction path, not a full-history baseline.
+    \item \emph{Unstructured neural ODE}: replace the structured vector
+    field with a learned vector field while retaining the state dimension,
+    encoder, initializer, additive readout, input path, and solver. Report
+    any parameter-count differences rather than claiming exact matching.
+    \item \emph{CNN--GRU and LSTM}: retain the strongest measured recurrent
+    references under the same data and selection protocol.
+\end{enumerate}
+Separate residual-weight and residual-removal ablations can then test the
+regularization and learnable correction in the vector field. Removing
+$\mathcal H_\phi$ from the readout is different from removing
+$\mathbf r_\theta$ from the dynamics; these interventions must not share
+an ambiguous \emph{no residual} label.
+
+Next, test $m=64$ and, if justified by validation and cost, $m=128$ for
+PGND and the recurrent references. The 16-sample reference represents
+approximately 16~ms up to the prediction target; a 20-Hz oscillation has
+a 50-ms period, but 20~Hz is a cutoff label, not an established dominant
+signal frequency. Longer context is therefore a hypothesis to test, not
+a known remedy. Compare lengths on common eligible target indices within
+each partition so that changes in scored samples do not masquerade as
+context benefits; report the resulting counts. Test the warm-up
+initializer only after isolating the readout and window-length effects.
+Its candidate lengths and initialization rules must be declared before
+those runs.
+
+\subsection{Selection, Repetitions, and Interpretation}
+Use the same predefined seeds, for example 0--4, for all principal
+comparisons, and report aggregate and per-recording metrics. Any tuning
+of learning rate, residual weight, or architecture is restricted to
+training/validation data, with candidate sets and search budgets reported
+for each model. Seed variability measures optimization variability, not
+diversity of physical operating conditions. The 69,909 overlapping test
+windows are not independent experimental replicates; uncertainty analysis
+must respect recording and temporal dependence.
+
+The existing test scores have already informed the decision to revise the
+method. Repeated use of these recordings is therefore development-stage
+evidence, not an untouched confirmatory test. New held-out simulation runs
+or a separately reserved, previously unexamined condition set will be
+needed for final confirmation. Any future comparison across bandwidths
+must group filtered versions of the same underlying simulation to avoid
+mistaking related trajectories for independent holdouts.
+
+A gain over PGND-0 alone supports the readout modification, not the physics
+claim. Evidence for the mechanical structure requires comparison with the
+unstructured ODE and appropriate ablations. If those comparisons reveal
+no accuracy or robustness benefit, the conclusion and claimed contribution
+must remain limited. Noise, missing-observation, and cross-condition
+experiments may be added under predefined common perturbations and
+information budgets, but no such advantage is claimed in this draft.
+
+\section{Discussion and Limitations}
+The direct readout and warm-up initializer address different hypothesized
+limitations, without identifying latent coordinates with physical states.
+Enforcing simulator force balance would require its parameters, relevant
+states, and conventions; arbitrary physical losses should not be imposed
+on unidentified latent coordinates.
+
+Evidence remains limited to one seed, one bandwidth, known training speeds,
+and reduced training targets. Simulation-model validation does not validate
+the estimator on field measurements, and unknown upstream filtering
+precludes a zero-latency sensing claim. PGND also remains more expensive
+than the recurrent references. Accuracy, inference latency, memory, and
+numerical convergence must be assessed jointly before deployment claims.
+
+\section{Conclusion}
+Observation-conditioned PGND combines a direct response-based prediction
+with a structured latent dynamical correction; causal warm-up initialization
+is a separate extension. The original latent-only model does not outperform
+CNN--GRU in the completed 100-epoch simulation comparison. The proposed
+revision remains unvalidated. Its controls will distinguish contributions
+from observation access, temporal context, and mechanical structure.
 
 \section{Data Availability}
-
-The CIFAR-10 dataset used in this study is publicly available from the University of Toronto at \url{https://www.cs.toronto.edu/~kriz/cifar.html}. All datasets are automatically downloaded through the standard PyTorch \texttt{torchvision} API within the provided codebase, ensuring full reproducibility without manual data handling.
-
+The simulation outputs originate from the previous study
+\cite{ale2026realtime}; original spreadsheets are preserved unchanged
+locally. A public release, persistent identifier, and redistribution terms
+have not been established. No access commitment is made in this draft.
 
 \section{Code Availability}
+The PyTorch implementation and saved results correspond to PGND-0.
+The additive readout, warm-up, best-validation checkpointing, and planned
+controls require subsequent implementation and testing. Run metadata record
+file hashes, splits, scaling, settings, and seeds. A public archival code
+release and version identifier remain to be supplied before submission.
 
-The source code for all experiments, including dataset partitioning, importance-based pruning, training scripts, and plotting utilities, is publicly available at: \url{https://github.com/ainilaha/edge\_pruning}. The repository contains detailed instructions for reproducing all results reported in this study.
-
-
-
-
-\section*{Competing interests}
+\section*{Competing Interests}
 The authors declare no competing interests.
 
 \section*{Funding Declaration}
-This work is supported by the Natural Science Foundation of China (No.62361016) and the Fundamental Research Funds for the Central Universities (2682024CX003).
+This work is supported by the Natural Science Foundation of China
+(No.62361016) and the Fundamental Research Funds for the Central
+Universities (2682024CX003).
 
-\bibliographystyle{IEEEannot}
+\bibliographystyle{IEEEtran}
 \bibliography{annot}
 \end{document}

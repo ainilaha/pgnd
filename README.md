@@ -1,6 +1,6 @@
 # Physics-Guided Neural Dynamics for Pantograph–Catenary Contact Force Estimation
 
-**PGND** is a research proof-of-concept for estimating contact force from panhead acceleration and displacement using physics-guided continuous-time latent dynamics. It implements a quadratic-potential version of the formulation in [main.tex](main.tex), alongside PyTorch RNN, LSTM, GRU, and CNN–GRU baselines. The first experiment is a shared finite-window, next-sample prediction comparison, not yet a validation of the draft's streaming or robustness claims.
+**PGND** is a research proof-of-concept for estimating contact force from panhead acceleration and displacement using physics-guided continuous-time latent dynamics. The code implements the original quadratic-potential, latent-only model (PGND-0 in the [manuscript](manuscript/main.tex)), alongside PyTorch RNN, LSTM, GRU, and CNN–GRU baselines. The revised manuscript proposes an observation-conditioned readout and a separate warm-up initialization study; these are not yet implemented or evaluated. Existing results concern finite-window, next-sample prediction, not streaming or robustness validation.
 
 ## Installation
 
@@ -32,7 +32,7 @@ Distance increments divided by filename speed imply 0.001 s sampling, assuming d
 
 ## PGND correspondence to the manuscript
 
-Equation labels below refer to `main.tex`, avoiding unstable equation numbering.
+Equation labels below refer to `manuscript/main.tex`, avoiding unstable equation numbering. This table describes the implemented PGND-0 control, not the proposed additive-readout revision.
 
 | Manuscript component | Implementation in `src/model.py` |
 | --- | --- |
@@ -41,14 +41,14 @@ Equation labels below refer to `main.tex`, avoiding unstable equation numbering.
 | `eq:final_pgnd`, `eq:damping_constraint` | `q_dot=v`, `v_dot=-Dv-Kq+Bh+r`; learned `D=L_D L_Dᵀ`; bias-free 16→16 drive B |
 | `eq:quadratic_potential`, `eq:linear_restoring` | `V(q)=qᵀKq/2`, `K=L_K L_Kᵀ`; exact analytic `grad V=Kq`, differentiable with respect to q and K |
 | `eq:neural_residual` | `[q,v,h,t]` (49 inputs) →32→16 tanh MLP; final layer initialized to zero |
-| `eq:force_decoder` | `[q,v]`→32→1 tanh MLP, linear standardized-force output, then fixed inverse scaling for reporting |
+| `eq:latent_only_decoder`, `eq:force_reconstruction` | `[q,v]`→32→1 tanh MLP, linear standardized-force output, then fixed inverse scaling for reporting |
 | `eq:ode_solver`, `eq:total_loss` | `torchdiffeq.odeint` with direct autograd; standardized force MSE plus residual penalty |
 
 These dimensions and MLP widths are initial implementation choices, not recovered paper hyperparameters. The model has 5,761 trainable parameters. Both factor matrices start at `0.1 I`, giving `D=K=0.01 I`; other layers use PyTorch's default initialization except the zero residual output. A symmetric K is needed for the manuscript's `grad V=Kq` identity; the PSD factorization is an explicitly chosen, bounded-below quadratic special case, not a learned nonlinear potential or an identified physical pantograph stiffness.
 
 ODE time is relative to the window start and measured in milliseconds (`time_unit=0.001` seconds). Consequently latent v is `dq/d(milliseconds)`, and learned coefficients are in these latent/time coordinates, not SI mechanical parameters. RK4 uses step 1 in those units (one nominal sample interval). `dopri5` is also available with rtol=1e-5, atol=1e-7; tolerances do not control fixed-step RK4 accuracy. No custom integrator or adjoint approximation is used.
 
-**Information budget and loss:** each model resets on the same 16 historical observations and predicts the following force. PGND linearly interpolates only the observed history and holds the last encoding constant for the final, unobserved interval. It never uses the target-time observation. This differs from the draft's contemporaneous reconstruction and long continuous trajectory: only the last decoded force is supervised per window, while the residual penalty is the mean, over windows and 16 evolved sample times, of the **sum** of squared residual components. The whole latent/decoded trajectory is available via `return_details=True`, but it is not trajectory-supervised in this experiment.
+**Information budget and loss:** each model resets on the same 16 historical observations and predicts the following force. PGND linearly interpolates only the observed history and holds the last encoding constant for the final, unobserved interval. It never uses the target-time observation. The revised manuscript now states this finite-history protocol explicitly: only the last decoded force is supervised per window, while the residual penalty is the mean, over windows and 16 evolved sample times, of the **sum** of squared residual components. The whole latent/decoded trajectory is available via `return_details=True`, but it is not trajectory-supervised in this experiment.
 
 The loss is `MSE(standardized force) + 0.001 * mean(||r||²)`. The residual weight is a stated initial assumption, with no test-set tuning. Because force is standardized, this weight is not interchangeable with a weight multiplying raw-N² MSE. Unforced dynamics with B and r removed satisfy `dE/dt=-vᵀDv <= 0`; driving/residual terms can inject energy, and PSD damping alone does not guarantee stability or physically calibrated latent states in the trained model. No extra physics penalties were invented.
 
@@ -225,7 +225,9 @@ The trained model also has finite, nonzero gradients in every parameter tensor. 
 
 Before paper-level claims, resolve/validate physical timestamps and filter causality, streaming versus finite-window operation, contemporaneous reconstruction versus next-step prediction, nonlinear versus quadratic potential, latent dimensions and initialization length, loss/solver choices, and the intended speed/bandwidth protocols. Run multiple seeds, full training targets, broader numerical convergence checks, and physics/residual ablations. Temporal interpolation on an available history is compatible with this next-step task; it does not establish zero-delay online reconstruction under unknown upstream filtering.
 
-The draft's duplicate `eq:residual_loss` label and unrelated keywords/CIFAR-10/edge-pruning statements remain flagged, not edited. Its abstract promises improvements and robustness before supplying evidence. The previous paper also disagrees with its code about counts and several splits/model labels; consult the retained audit before comparing against its numbers. No baseline dominance, robustness or streaming claim should follow from one reduced single-bandwidth run.
+The manuscript-only revision fixes the duplicate residual-loss label, removes unrelated template text and unsupported performance claims, and distinguishes measured PGND-0 results from the untested revision and planned ablations. It retains the negative 100-epoch result and explicitly requires new held-out confirmation after method development. The previous paper still disagrees with its code about counts and several splits/model labels; consult the retained audit before comparing against its numbers. No baseline dominance, robustness or streaming claim should follow from one reduced single-bandwidth run.
+
+The LaTeX sources are self-contained under `manuscript/`. Build from that directory with a standard TeX installation, for example `latexmk -pdf main.tex`; the manuscript uses the standard `IEEEtran` bibliography style. The supplied bibliography, class, and historical `IEEEannot.bst` are retained. No model code, training settings, datasets, or experiment artifacts were changed by the manuscript revision.
 
 ## Repository layout
 
@@ -234,7 +236,11 @@ pgnd/
 ├── README.md
 ├── requirements.txt
 ├── .gitignore
-├── main.tex
+├── manuscript/
+│   ├── main.tex
+│   ├── annot.bib
+│   ├── IEEEtran.cls
+│   └── IEEEannot.bst        # retained historical bibliography style
 ├── data/
 │   ├── README.md
 │   ├── Data/                 # 120 unchanged local XLS files
@@ -253,4 +259,4 @@ pgnd/
 └── legacy/                  # scientific references and migration audit
 ```
 
-No datasets, legacy scientific references, baseline definitions or manuscript content were removed or rewritten during PGND implementation.
+No datasets, legacy scientific references or baseline definitions were removed or rewritten during PGND implementation. The subsequent manuscript revision is documented separately above.
