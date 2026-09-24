@@ -96,9 +96,14 @@ def main():
         model.load_state_dict(checkpoint["state_dict"])
         prediction = predict(model, X, device=args.device).astype(np.float64)
         prediction = prediction * normalization["force_std"] + normalization["force_mean"]
-        results.append({"model": name, "seed": checkpoint["seed"], "samples": len(target),
-                        "parameters": sum(p.numel() for p in model.parameters() if p.requires_grad),
-                        **force_metrics(target, prediction)})
+        row = {"run": path.stem, "model": name, "seed": checkpoint["seed"], "samples": len(target),
+               "parameters": sum(p.numel() for p in model.parameters() if p.requires_grad),
+               **force_metrics(target, prediction)}
+        results.append(row)
+        pd.DataFrame([row]).to_csv(args.output_dir / f"{path.stem}.metrics.csv", index=False)
+        # Bundle the checkpoint's actual history, not an unrelated sidecar file.
+        pd.DataFrame(checkpoint["history"]).to_csv(
+            args.output_dir / f"{path.stem}.history.csv", index=False)
         predictions = metadata["test"].copy()
         predictions["prediction_N"] = prediction
         predictions.to_csv(args.output_dir / f"{path.stem}.predictions.csv", index=False)

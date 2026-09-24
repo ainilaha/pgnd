@@ -1,14 +1,15 @@
 """Train PGND or a baseline on the same recording-safe, standardized windows."""
 
 import argparse
+import csv
 import hashlib
+import json
 from pathlib import Path
 import re
 import time
 import warnings
 
 import numpy as np
-import pandas as pd
 import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
@@ -20,11 +21,13 @@ from src.model import PGNDModel
 
 
 def fit(model, X_train, y_train, X_val, y_val, epochs=20, batch_size=32,
-        seed=0, device="cpu", learning_rate=0.001, residual_weight=0.001):
+        seed=0, device="cpu", learning_rate=0.001, residual_weight=0.001,
+        history_path=None):
     """Adam and final-epoch weights; no early stopping or test-set selection.
 
     MSE is in standardized-force units. PGND adds the manuscript's residual
     penalty; baselines have no residual term. Minibatch order has its own seed.
+    Write each completed epoch immediately, preserving history if interrupted.
     """
     if epochs < 1 or batch_size < 1 or residual_weight < 0:
         raise ValueError("Require positive epochs/batch size and nonnegative residual weight.")
@@ -66,6 +69,12 @@ def fit(model, X_train, y_train, X_val, y_val, epochs=20, batch_size=32,
                "seconds": time.perf_counter() - start}
         row["train_total_loss"] = row["train_mse_scaled"] + residual_weight * row["residual_loss"]
         history.append(row)
+        if history_path is not None:
+            with Path(history_path).open("x" if epoch == 1 else "a", newline="") as stream:
+                writer = csv.DictWriter(stream, fieldnames=row.keys())
+                if epoch == 1:
+                    writer.writeheader()
+                writer.writerow(row)
         print(f"Epoch {epoch}/{epochs}: mse={row['train_mse_scaled']:.6g}, "
               f"residual={row['residual_loss']:.6g}, val_mse={val_mse:.6g}, "
               f"seconds={row['seconds']:.2f}", flush=True)
@@ -99,7 +108,9 @@ def main():
     parser.add_argument("--rtol", type=float, default=1e-5)
     parser.add_argument("--atol", type=float, default=1e-7)
     args = parser.parse_args()
-    if args.output.exists() or args.output.with_suffix(".history.csv").exists():
+    history_path = args.output.with_suffix(".history.csv")
+    settings_path = args.output.with_suffix(".run.json")
+    if any(path.exists() for path in (args.output, history_path, settings_path)):
         raise FileExistsError(f"Choose a new output path: {args.output}")
     torch.set_num_threads(args.threads)
     torch.manual_seed(args.seed)
@@ -133,10 +144,8 @@ def main():
                          "time_unit": args.time_unit, "method": args.ode_method,
                          "step_size": args.ode_step, "rtol": args.rtol, "atol": args.atol}
         model = PGNDModel(**model_options)
-    history = fit(model, *arrays["train"], *arrays["validation"], args.epochs,
-                  args.batch_size, args.seed, args.device, args.learning_rate, args.residual_weight)
     checkpoint = {
-        "model": args.model, "model_options": model_options, "state_dict": model.cpu().state_dict(),
+        "model": args.model, "model_options": model_options,
         "protocol": "recording-split-training-standardization-v1",
         "train_files": train_files, "test_files": test_files,
         "data_sha256": {name: hashlib.sha256((args.data_dir / name).read_bytes()).hexdigest()
@@ -146,11 +155,19 @@ def main():
         "batch_size": args.batch_size, "threads": args.threads, "device": args.device,
         "residual_weight": args.residual_weight if args.model == "pgnd" else 0.0,
         "optimizer": {"name": "Adam", "lr": args.learning_rate, "betas": (0.9, 0.999), "eps": 1e-7},
-        "torch_version": str(torch.__version__), "history": history,
+        "torch_version": str(torch.__version__),
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
+    # Plain metadata is readable without loading PyTorch weights. A checkpoint
+    # is written only after all epochs finish; partial histories are not resumable.
+    with settings_path.open("x") as stream:
+        json.dump(checkpoint, stream, indent=2)
+        stream.write("\n")
+    history = fit(model, *arrays["train"], *arrays["validation"], args.epochs,
+                  args.batch_size, args.seed, args.device, args.learning_rate,
+                  args.residual_weight, history_path=history_path)
+    checkpoint.update(state_dict=model.cpu().state_dict(), history=history)
     torch.save(checkpoint, args.output)
-    pd.DataFrame(history).to_csv(args.output.with_suffix(".history.csv"), index=False)
     print(f"Saved final-epoch weights and settings to {args.output}", flush=True)
 
 

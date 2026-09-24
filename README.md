@@ -10,7 +10,7 @@ source .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
 
-Only PyTorch is used for learning; `torchdiffeq` supplies the ODE solver. `pandas`/`xlrd` read the original XLS data; `openpyxl` supports the older XLSX collection. No TensorFlow/Keras installation is needed.
+Only PyTorch is used for learning; `torchdiffeq` supplies the ODE solver. `pandas`/`xlrd` read the original XLS data; `openpyxl` supports the older XLSX collection. Matplotlib generates headless PDF figures. No TensorFlow/Keras installation is needed.
 
 ## Data and common experimental protocol
 
@@ -54,51 +54,111 @@ The loss is `MSE(standardized force) + 0.001 * mean(||r||²)`. The residual weig
 
 ## Training
 
-Run from the repository root. These commands reproduce the first comparison into a **new** directory (existing checkpoints are never overwritten):
+Run the following commands on the **remote server**, from the repository root after installation. Copy the ignored `data/Data/` files to that server first; cloning Git does not include them. The commands preserve the first comparison's experimental settings and write a **new** experiment directory with one subdirectory per model. Set `DEVICE=cpu` if CUDA is unavailable; changing device may change numerical results. No local training/evaluation was run for this logging/plotting update.
 
 ```bash
+set -e
+RUN=results/20hz_seed0_run1
+DEVICE=cuda
+
+# 1. Train each baseline.
 for model in lstm gru rnn cnn_gru; do
   python -m src.train --model "$model" \
     --train-pattern 'V(300|350|380)_Case[1-6]_CutFre20\.xls$' \
     --test-pattern 'V(300|350|380)_Case[7-8]_CutFre20\.xls$' \
     --epochs 20 --batch-size 128 --train-stride 16 \
     --sequence-length 16 --cut-percent 0.1 --validation-fraction 0.15 \
-    --learning-rate 0.001 --seed 0 --device cpu --threads 1 \
-    --output "results/reproduction_20hz_seed0/$model.pt" || break
+    --learning-rate 0.001 --seed 0 --device "$DEVICE" --threads 1 \
+    --output "$RUN/$model/$model.pt"
 done
 
+# 2. Train PGND.
 python -m src.train --model pgnd \
   --train-pattern 'V(300|350|380)_Case[1-6]_CutFre20\.xls$' \
   --test-pattern 'V(300|350|380)_Case[7-8]_CutFre20\.xls$' \
   --epochs 20 --batch-size 128 --train-stride 16 \
   --sequence-length 16 --cut-percent 0.1 --validation-fraction 0.15 \
-  --learning-rate 0.001 --seed 0 --device cpu --threads 1 \
+  --learning-rate 0.001 --seed 0 --device "$DEVICE" --threads 1 \
   --latent-dim 16 --encoding-dim 16 --hidden-dim 32 --residual-weight 0.001 \
   --time-unit 0.001 --ode-method rk4 --ode-step 1 --rtol 1e-5 --atol 1e-7 \
-  --output results/reproduction_20hz_seed0/pgnd.pt
+  --output "$RUN/pgnd/pgnd.pt"
 ```
 
-All models use Adam (betas 0.9/0.999, epsilon 1e-7), MSE and final-epoch weights. There is no early stopping, scheduler, clipping, weight decay, dropout or test-based selection. Defaults remain batch size 32 and training stride 1; the commands deliberately override them. Checkpoints record ordered files and hashes, preprocessing and normalization, counts, seed, optimizer, architecture weights, PGND/solver settings and actual history. Each also saves a small history CSV; MSE columns there are in standardized-force units, not N².
+All models use Adam (betas 0.9/0.999, epsilon 1e-7), MSE and final-epoch weights. There is no early stopping, scheduler, clipping, weight decay, dropout or test-based selection. Defaults remain batch size 32 and training stride 1; the commands deliberately override them. Use stride 1 for full training targets only if changed consistently for all models in a new run.
+
+Before optimization, `<model>.run.json` records the run settings: ordered files/hashes, preprocessing/normalization, counts, seed, optimizer, device, and PGND architecture/solver settings. Each completed epoch is appended to `<model>.history.csv`, so an interrupted run keeps its completed history. Columns are `epoch`, `train_mse_scaled`, `val_mse_scaled`, `residual_loss`, `train_total_loss`, and `seconds`. MSE is in standardized-force units, not N²; PGND's total includes its residual penalty, whereas validation MSE does not. Training MSE averages minibatches during updates; validation MSE uses the end-of-epoch weights. The final `.pt` also contains the settings and full history. Interrupted histories are not resume checkpoints; choose a new output name to rerun. Existing checkpoint/history/settings files are never overwritten.
 
 The baselines retain two 32-unit recurrent layers and a linear output; CNN–GRU adds a width-1 64-channel ReLU convolution. Trainable parameter counts are RNN 3,233; LSTM 12,833; GRU 9,825; CNN–GRU 15,969. The preserved Keras initializer families, LSTM forget bias and reset-after GRU are documented in the audit. Architecture equivalence does not imply bitwise Keras equivalence. PGND has fewer parameters and a different computation budget; equal epochs are not equal runtime or architecture-specific hyperparameter optimization.
 
 ## Evaluation
 
 ```bash
+# 3. Evaluate all models with the common pipeline (same shell as above).
 python -m src.evaluate \
-  results/reproduction_20hz_seed0/lstm.pt \
-  results/reproduction_20hz_seed0/gru.pt \
-  results/reproduction_20hz_seed0/rnn.pt \
-  results/reproduction_20hz_seed0/cnn_gru.pt \
-  results/reproduction_20hz_seed0/pgnd.pt \
-  --device cpu --threads 1 --output-dir results/reproduction_20hz_seed0/evaluation
+  "$RUN/lstm/lstm.pt" "$RUN/gru/gru.pt" "$RUN/rnn/rnn.pt" \
+  "$RUN/cnn_gru/cnn_gru.pt" "$RUN/pgnd/pgnd.pt" \
+  --device "$DEVICE" --threads 1 --output-dir "$RUN/evaluation"
 ```
 
-The evaluator checks file hashes and matching protocol, splits, statistics, training budget and seed before comparing. It pools exactly the same test targets for each model and reports MAE (N), RMSE (N), the legacy MSE (N²), and R² (undefined for constant targets). `comparison.csv` contains the table; per-checkpoint prediction CSVs contain filename, original zero-based source row, distance, true force and prediction in newtons. Results/checkpoints are local and ignored by Git.
+The evaluator checks file hashes and matching protocol, splits, statistics, training budget and seed before comparing. It pools exactly the same test targets for each model and reports MAE (N), RMSE (N), the legacy MSE (N²), and R² (undefined for constant targets). The new evaluation directory contains:
 
-### Measured first comparison
+- `comparison.csv`: all models, including run name, model, seed, sample/parameter counts and metrics.
+- `<model>.metrics.csv`: final metrics for that model/run.
+- `<model>.predictions.csv`: filename, original zero-based source row, distance, ground-truth `force_N`, and `prediction_N` in newtons.
+- `<model>.history.csv`: the actual training history embedded in that checkpoint, bundled for plotting without loading weights.
 
-These are actual final-epoch results from the above settings, not the prior paper's results. Local artifacts are in `results/poc_20hz_seed0/`; the reproduction commands use a separate directory to avoid overwriting them.
+The run name is the checkpoint filename stem. Stems must be distinct in a comparison, even when checkpoints live in separate directories. Evaluation refuses an existing output directory; use a new name to reevaluate. The existing compatibility checks deliberately compare one matched seed/budget at a time, not aggregate multiple seeds into error bars. Outputs remain ignored by Git.
+
+## Visualization
+
+```bash
+# 4. Generate all comparison figures from saved CSVs only.
+python -m src.plot "$RUN/evaluation" \
+  --recording V300_Case7_CutFre20.xls --start 0 --points 1000 \
+  --output-dir "$RUN/figures"
+```
+
+`src/plot.py` is separate from the model, training, and evaluation code. It imports no PyTorch model or raw-data loader and uses Matplotlib's headless backend. It saves vector PDF versions only of:
+
+- `training_loss_curves`: all models' training **MSE** on one axis, distinguished by colors and markers.
+- `validation_loss_curves`: all models' validation **MSE** on a separate figure, using the same model colors and markers. Training and validation are not mixed; PGND's regularized total is not mislabeled as MSE.
+- `metric_comparison`: separate panels for MAE, RMSE, MSE and R², with units and no unsupported uncertainty bars. Negative R² is retained; undefined R² is labeled.
+- `force_predictions`: one black ground-truth curve and all model predictions on one axis, distinguished by colors and sparse markers, for exactly the same consecutive targets in one recording. Marker spacing does not subsample the plotted lines.
+
+`--start` is an offset into that recording's eligible test targets, not an original XLS row number. `--points` is capped at the recording's remaining targets. Original source row numbers appear in the figure title; distance is the horizontal axis. No smoothing, resampling, best-segment search, or joining of unrelated recordings is performed. If `--recording` is omitted, the first evaluated recording is used. Prediction files must have identical ordered target provenance and ground truth. Use a new figure directory for another selection; existing figures are not overwritten.
+
+New layout (repeat the model subdirectory for all five models):
+
+```text
+results/20hz_seed0_run1/
+├── lstm/
+│   ├── lstm.run.json
+│   ├── lstm.history.csv
+│   └── lstm.pt
+├── gru/ ...
+├── rnn/ ...
+├── cnn_gru/ ...
+├── pgnd/ ...
+├── evaluation/
+│   ├── comparison.csv
+│   ├── lstm.metrics.csv
+│   ├── lstm.history.csv
+│   ├── lstm.predictions.csv
+│   └── ...                  # equivalent files for each model
+└── figures/
+    ├── training_loss_curves.pdf
+    ├── validation_loss_curves.pdf
+    ├── metric_comparison.pdf
+    └── force_predictions.pdf
+```
+
+Previously saved checkpoints from the shared protocol remain evaluable. Older evaluation folders lack the bundled histories/run column: reevaluate those checkpoints into a new directory on the server before using this plot command. This update does not change preprocessing, model definitions, optimization, metric formulas, or prior result artifacts.
+
+This update was checked with Python/shell syntax validation and synthetic CSV fixtures only: per-epoch history writing, PNG/PDF exports, single-model panels, negative/undefined R², recording selection, matching-target checks and overwrite protection. Synthetic figures were inspected outside the repository. No training or real-data evaluation was run for this update.
+
+## Previously measured first comparison
+
+These are previously obtained final-epoch results, not new runs from the logging/visualization update and not the prior paper's results. Local artifacts are in `results/poc_20hz_seed0/`; the remote commands use a separate directory to avoid overwriting them. The prior run used CPU; the remote example selects CUDA.
 
 | Model | MAE (N) | RMSE (N) | MSE (N²) | R² |
 | --- | ---: | ---: | ---: | ---: |
@@ -140,7 +200,8 @@ pgnd/
 │   ├── model.py
 │   ├── baselines.py
 │   ├── train.py
-│   └── evaluate.py
+│   ├── evaluate.py
+│   └── plot.py
 ├── results/
 │   ├── .gitkeep
 │   └── poc_20hz_seed0/       # local checkpoints, histories and evaluation CSVs
