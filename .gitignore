@@ -1,6 +1,8 @@
 # Python
 __pycache__/
 *.py[cod]
+.ipynb_checkpoints/
+.virtual_documents/
 
 # Virtual environments
 .venv/
@@ -17,6 +19,11 @@ checkpoints/
 *.ckpt
 *.pt
 *.pth
+*.keras
+*.h5
+
+# Retained historical run artifacts stay local
+legacy/history/
 
 # Local datasets (keep documentation)
 data/*
