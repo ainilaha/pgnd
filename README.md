@@ -90,6 +90,35 @@ Before optimization, `<model>.run.json` records the run settings: ordered files/
 
 The baselines retain two 32-unit recurrent layers and a linear output; CNN–GRU adds a width-1 64-channel ReLU convolution. Trainable parameter counts are RNN 3,233; LSTM 12,833; GRU 9,825; CNN–GRU 15,969. The preserved Keras initializer families, LSTM forget bias and reset-after GRU are documented in the audit. Architecture equivalence does not imply bitwise Keras equivalence. PGND has fewer parameters and a different computation budget; equal epochs are not equal runtime or architecture-specific hyperparameter optimization.
 
+### GPU execution
+
+The execution path now removes redundant work without changing the architecture, loss, data protocol, optimizer, batch size, or ODE method/step/tolerances:
+
+- PGND computes D and K once per forward solve, retaining autograd; they are never detached or reused across optimizer steps. Interpolation uses on-device tensor indexing, and broadcast time inputs avoid repeated allocations.
+- Training requests only the final force and residual penalty (`return_residual=True`), rather than decoding every intermediate state. `return_details=True` still returns the full trajectory for analysis, and existing checkpoints remain loadable.
+- Finite-loss and finite-gradient checks still run before every optimizer update. The gradient check uses a single combined decision instead of a CPU–GPU synchronization per parameter. Detached loss totals remain on the GPU until epoch end; validation/test predictions are transferred back once per prediction call. Epoch `seconds` still includes training plus validation, with CUDA synchronized at the timing boundary.
+- CUDA loaders use pinned memory and nonblocking transfers. Optional `--preload-data` keeps training inputs/targets and validation inputs on the selected device, gathering entire batches with the original seeded CPU index order. The same flag on `src.evaluate` keeps test inputs on-device. Omit it if device memory is insufficient; it changes storage, not sampling or optimizer updates.
+
+For the planned **100-epoch** remote runs, keep `--epochs 100 --batch-size 128 --train-stride 16 --seed 0` and add `--preload-data` to the existing training and evaluation commands, for example:
+
+```bash
+python -m src.train --model pgnd \
+  --train-pattern 'V(300|350|380)_Case[1-6]_CutFre20\.xls$' \
+  --test-pattern 'V(300|350|380)_Case[7-8]_CutFre20\.xls$' \
+  --epochs 100 --batch-size 128 --train-stride 16 \
+  --sequence-length 16 --cut-percent 0.1 --validation-fraction 0.15 \
+  --learning-rate 0.001 --seed 0 --device cuda --threads 1 --preload-data \
+  --latent-dim 16 --encoding-dim 16 --hidden-dim 32 --residual-weight 0.001 \
+  --time-unit 0.001 --ode-method rk4 --ode-step 1 --rtol 1e-5 --atol 1e-7 \
+  --output results/20hz_seed0_epochs100_fast/pgnd/pgnd.pt
+```
+
+Use the same common settings and flag for all baselines and a new results directory to preserve earlier runs. No compilation, mixed precision, solver substitution or larger integration step is enabled. Metadata records `implementation=cached-dynamics-v1` and `preload_data`; small floating-point differences from operation ordering remain possible, so bitwise-equivalent training is not promised.
+
+Local verification used synthetic forward/backward inputs only: old/new predictions, trajectories, residual penalties and gradients agree in FP32/FP64; regular/irregular RK4 and adaptive Dopri5 paths pass. Preloaded/streaming batches preserve the original order, and NaN/Inf gradients are still rejected. No local training or real-data experiment was run for this optimization.
+
+A subsequent remote CUDA check on an RTX 3080 Ti (12 GB, PyTorch 2.8.0+cu128, torchdiffeq 0.2.5) passed prediction/loss/gradient equivalence using a trained checkpoint. With synthetic inputs, batch size 128 and the same 16-step RK4 setup, the median forward/backward time over three warmed 10-iteration blocks was 118.8 ms before versus 95.8 ms after optimization (**1.24×**). This excludes data transfer, validation and optimizer updates; it is not an end-to-end training speedup or an accuracy result. `torchdiffeq` still has a sequential Python-driven integration loop, so GPU utilization can remain modest.
+
 ## Evaluation
 
 ```bash
@@ -125,7 +154,7 @@ python -m src.plot "$RUN/evaluation" \
 - `metric_comparison`: separate panels for MAE, RMSE, MSE and R², with units and no unsupported uncertainty bars. Negative R² is retained; undefined R² is labeled.
 - `force_predictions`: one black ground-truth curve and all model predictions on one axis, distinguished by colors and sparse markers, for exactly the same consecutive targets in one recording. Marker spacing does not subsample the plotted lines.
 
-`--start` is an offset into that recording's eligible test targets, not an original XLS row number. `--points` is capped at the recording's remaining targets. Original source row numbers appear in the figure title; distance is the horizontal axis. No smoothing, resampling, best-segment search, or joining of unrelated recordings is performed. If `--recording` is omitted, the first evaluated recording is used. Prediction files must have identical ordered target provenance and ground truth. Use a new figure directory for another selection; existing figures are not overwritten.
+`--start` is an offset into that recording's eligible test targets, not an original XLS row number. `--points` is capped at the recording's remaining targets. Original source row numbers appear in the figure title; distance is the horizontal axis. No smoothing, resampling, best-segment search, or joining of unrelated recordings is performed. If `--recording` is omitted, the first evaluated recording is used. Prediction files must have identical ordered target provenance and ground truth. Existing figure directories are allowed: matching output PDFs are overwritten, while unrelated files are left untouched. Use a different directory to keep another selection's figures.
 
 New layout (repeat the model subdirectory for all five models):
 
@@ -171,6 +200,22 @@ These are previously obtained final-epoch results, not new runs from the logging
 PGND has the lowest errors in this run. This is encouraging evidence for the implemented finite-window quadratic variant, **not** evidence of statistical superiority, unseen-speed/bandwidth robustness, streaming performance, or a causal benefit from the physics terms without ablations. No hyperparameters or epoch choices were changed after inspecting test results.
 
 Executed on CPU with one PyTorch thread, Python 3.12.14, PyTorch 2.14.0, torchdiffeq 0.2.5, NumPy 2.3.5 and pandas 2.2.3. The local interpreter was `/tmp/pgnd-audit-C5c0lj/venv/bin/python`; it is not a repository dependency. Dependency versions are reported, not pinned; bitwise agreement across environments is not promised.
+
+## Remote 100-epoch comparison
+
+The requested 100-epoch comparison completed on the RTX 3080 Ti server. The four already-completed baseline checkpoints in `results/20hz_seed0_epochs100/` were reused after checking their training budgets, optimizer settings, seed, data hashes, splits and normalization. PGND was trained from scratch with the optimized path and `--preload-data`, preserving the incomplete earlier PGND run. All five final-epoch checkpoints were evaluated together on the same 69,909 test targets; no checkpoint was selected using test performance.
+
+| Model | MAE (N) | RMSE (N) | MSE (N²) | R² |
+| --- | ---: | ---: | ---: | ---: |
+| LSTM | 9.226921 | 12.279406 | 150.783806 | 0.891058 |
+| GRU | 9.658776 | 12.731461 | 162.090112 | 0.882889 |
+| RNN | 9.883681 | 13.100278 | 171.617287 | 0.876005 |
+| CNN–GRU | 9.073282 | 12.141102 | 147.406361 | 0.893498 |
+| PGND | 9.384956 | 12.591375 | 158.542713 | 0.885452 |
+
+CNN–GRU, not PGND, has the lowest errors in this run. The longer training budget therefore does not support a claim of PGND superiority. These remain single-seed, 20-Hz-only results; the earlier CPU/20-epoch results also differ in device/runtime and are not a controlled epoch-only comparison.
+
+The new PGND checkpoint, training log/history, all-model evaluation CSVs and four PDF figures are in `results/20hz_seed0_epochs100_fast/`, on the server and copied back locally. PGND's 100 training/validation epochs took 1,056.7 seconds in total (17.6 minutes), with a median of 10.52 seconds per epoch. It remains substantially slower than the recurrent baselines; the 1.24× forward/backward microbenchmark above is a separate measurement, not an end-to-end speedup claim. The baseline training used the earlier streaming execution path; all models were evaluated with the optimized evaluator and preloaded test inputs, without changing model definitions or scientific settings.
 
 ## Verification and remaining scientific questions
 

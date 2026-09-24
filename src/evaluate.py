@@ -42,8 +42,9 @@ def predict(model, X, batch_size=1024, device="cpu"):
     with torch.no_grad():
         for start in range(0, len(X), batch_size):
             batch = torch.as_tensor(X[start:start + batch_size], dtype=torch.float32, device=device)
-            predictions.append(model(batch).cpu().numpy().reshape(-1))
-    return np.concatenate(predictions)
+            predictions.append(model(batch).reshape(-1))
+    # Transfer once, rather than synchronizing after every prediction batch.
+    return torch.cat(predictions).cpu().numpy()
 
 
 def main():
@@ -53,6 +54,8 @@ def main():
     parser.add_argument("--output-dir", type=Path, required=True, help="New directory for CSV results")
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--threads", type=int, default=1)
+    parser.add_argument("--preload-data", action="store_true",
+                        help="Keep prepared test inputs on the selected device")
     args = parser.parse_args()
     if args.output_dir.exists():
         raise FileExistsError(f"Choose a new results directory: {args.output_dir}")
@@ -76,6 +79,8 @@ def main():
         reference["train_files"], reference["test_files"], args.data_dir,
         normalization=reference["normalization"], **reference["data_settings"])
     X, _ = arrays["test"]
+    if args.preload_data:
+        X = torch.as_tensor(X, dtype=torch.float32, device=args.device)
     target = metadata["test"]["force_N"].to_numpy()
     args.output_dir.mkdir(parents=True)
     results = []

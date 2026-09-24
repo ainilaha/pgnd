@@ -22,7 +22,7 @@ from src.model import PGNDModel
 
 def fit(model, X_train, y_train, X_val, y_val, epochs=20, batch_size=32,
         seed=0, device="cpu", learning_rate=0.001, residual_weight=0.001,
-        history_path=None):
+        history_path=None, preload_data=False):
     """Adam and final-epoch weights; no early stopping or test-set selection.
 
     MSE is in standardized-force units. PGND adds the manuscript's residual
@@ -31,25 +31,43 @@ def fit(model, X_train, y_train, X_val, y_val, epochs=20, batch_size=32,
     """
     if epochs < 1 or batch_size < 1 or residual_weight < 0:
         raise ValueError("Require positive epochs/batch size and nonnegative residual weight.")
+    device = torch.device(device)
     model.to(device)
-    dataset = TensorDataset(torch.as_tensor(X_train, dtype=torch.float32),
-                            torch.as_tensor(y_train, dtype=torch.float32).reshape(-1, 1))
+    train_inputs = torch.as_tensor(X_train, dtype=torch.float32)
+    train_targets = torch.as_tensor(y_train, dtype=torch.float32).reshape(-1, 1)
+    if preload_data:
+        train_inputs, train_targets = train_inputs.to(device), train_targets.to(device)
+        X_val = torch.as_tensor(X_val, dtype=torch.float32, device=device)
+        # Shuffle CPU indices with the same DataLoader generator/order as before.
+        # Gather a whole GPU batch at once, not one GPU operation per sample.
+        dataset = torch.arange(len(train_targets))
+    else:
+        dataset = TensorDataset(train_inputs, train_targets)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True,
-                        generator=torch.Generator().manual_seed(seed))
+                        generator=torch.Generator().manual_seed(seed),
+                        pin_memory=device.type == "cuda")
     optimizer = torch.optim.Adam((p for p in model.parameters() if p.requires_grad),
                                  lr=learning_rate, betas=(0.9, 0.999), eps=1e-7)
     loss_fn = nn.MSELoss()
     history = []
     for epoch in range(1, epochs + 1):
+        if device.type == "cuda":
+            torch.cuda.synchronize(device)
         start = time.perf_counter()
         model.train()
-        squared_error, residual_total = 0.0, 0.0
-        for X_batch, y_batch in loader:
-            X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+        # Match the old Python-double accumulation without per-batch .item().
+        totals = torch.zeros(2, dtype=torch.float64,
+                             device="cpu" if device.type == "mps" else device)
+        for batch in loader:
+            if preload_data:
+                indices = batch.to(device, non_blocking=True)
+                X_batch = train_inputs.index_select(0, indices)
+                y_batch = train_targets.index_select(0, indices)
+            else:
+                X_batch, y_batch = (tensor.to(device, non_blocking=True) for tensor in batch)
             optimizer.zero_grad()
             if isinstance(model, PGNDModel):
-                prediction, details = model(X_batch, return_details=True)
-                residual = details["residual_loss"]
+                prediction, residual = model(X_batch, return_residual=True)
             else:
                 prediction = model(X_batch)
                 residual = prediction.new_zeros(())
@@ -58,12 +76,14 @@ def fit(model, X_train, y_train, X_val, y_val, epochs=20, batch_size=32,
             if not torch.isfinite(loss):
                 raise ValueError("Training loss became non-finite.")
             loss.backward()
-            if not all(p.grad is None or torch.isfinite(p.grad).all() for p in model.parameters()):
+            gradients = torch.cat([p.grad.reshape(-1) for p in model.parameters() if p.grad is not None])
+            if not torch.isfinite(gradients).all():
                 raise ValueError("A training gradient became non-finite.")
             optimizer.step()
-            squared_error += mse.item() * len(X_batch)
-            residual_total += residual.item() * len(X_batch)
+            totals += torch.stack((mse.detach(), residual.detach())).to(
+                device=totals.device, dtype=torch.float64) * len(X_batch)
         val_mse = mean_squared_error(y_val, predict(model, X_val, device=device))
+        squared_error, residual_total = totals.cpu().tolist()
         row = {"epoch": epoch, "train_mse_scaled": squared_error / len(dataset),
                "residual_loss": residual_total / len(dataset), "val_mse_scaled": val_mse,
                "seconds": time.perf_counter() - start}
@@ -98,6 +118,8 @@ def main():
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--threads", type=int, default=1)
+    parser.add_argument("--preload-data", action="store_true",
+                        help="Keep prepared training/validation inputs on the selected device")
     parser.add_argument("--latent-dim", type=int, default=16)
     parser.add_argument("--encoding-dim", type=int, default=16)
     parser.add_argument("--hidden-dim", type=int, default=32)
@@ -153,6 +175,7 @@ def main():
         "data_settings": settings, "normalization": normalization, "sample_interval": dt,
         "window_counts": counts, "seed": args.seed, "epochs": args.epochs,
         "batch_size": args.batch_size, "threads": args.threads, "device": args.device,
+        "preload_data": args.preload_data, "implementation": "cached-dynamics-v1",
         "residual_weight": args.residual_weight if args.model == "pgnd" else 0.0,
         "optimizer": {"name": "Adam", "lr": args.learning_rate, "betas": (0.9, 0.999), "eps": 1e-7},
         "torch_version": str(torch.__version__),
@@ -165,7 +188,7 @@ def main():
         stream.write("\n")
     history = fit(model, *arrays["train"], *arrays["validation"], args.epochs,
                   args.batch_size, args.seed, args.device, args.learning_rate,
-                  args.residual_weight, history_path=history_path)
+                  args.residual_weight, history_path=history_path, preload_data=args.preload_data)
     checkpoint.update(state_dict=model.cpu().state_dict(), history=history)
     torch.save(checkpoint, args.output)
     print(f"Saved final-epoch weights and settings to {args.output}", flush=True)

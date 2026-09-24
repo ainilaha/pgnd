@@ -88,7 +88,7 @@ def plot_force(predictions, labels, colors, recording, start, points, output_dir
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("evaluation_dir", type=Path, help="Directory produced by src.evaluate")
-    parser.add_argument("--output-dir", type=Path, help="New figure directory; default: evaluation_dir/figures")
+    parser.add_argument("--output-dir", type=Path, help="Figure directory (matching PDFs overwritten); default: evaluation_dir/figures")
     parser.add_argument("--recording", help="Exact data filename; default: first evaluated recording")
     parser.add_argument("--start", type=int, default=0, help="Zero-based offset among the recording's test targets")
     parser.add_argument("--points", type=int, default=1000, help="Maximum consecutive targets in force plot")
@@ -96,8 +96,6 @@ def main():
     if args.start < 0 or args.points < 1:
         parser.error("--start must be nonnegative and --points must be positive.")
     output_dir = args.output_dir or args.evaluation_dir / "figures"
-    if output_dir.exists():
-        raise FileExistsError(f"Choose a new figure directory: {output_dir}")
     table = pd.read_csv(args.evaluation_dir / "comparison.csv")
     if table.empty or "run" not in table or not table["run"].is_unique:
         raise ValueError("Expected distinct run names; regenerate evaluation with the current evaluator.")
@@ -121,7 +119,7 @@ def main():
         parser.error("--start lies beyond the selected recording's targets.")
     plt.rcParams.update({"font.size": 10, "axes.spines.top": False,
                          "axes.spines.right": False, "pdf.fonttype": 42})
-    output_dir.mkdir(parents=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
     plot_losses(histories, labels, colors, output_dir)
     plot_metrics(table, labels, colors, output_dir)
     plot_force(predictions, labels, colors, recording, args.start, args.points, output_dir)
