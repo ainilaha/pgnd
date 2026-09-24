@@ -1,5 +1,6 @@
 numpy
 pandas
 torch
+torchdiffeq
 xlrd
 openpyxl

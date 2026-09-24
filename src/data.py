@@ -1,13 +1,12 @@
-"""Shared data preparation adapted from legacy/data_util.py.
+"""Shared, recording-safe preprocessing for PGND and the PyTorch baselines.
 
-This is the legacy numerical protocol, including its known limitations:
-header=0 on headerless XLS files, concatenation before windowing, no scaling,
-and next-sample targets. See legacy/README.md before using it for new results.
+Retains legacy per-end trimming and next-sample targets. Unlike the legacy
+protocol, reads headerless data correctly, splits before windowing, never
+joins recordings, and standardizes using training rows only. See README.md.
 """
 
 from pathlib import Path
 import re
-import warnings
 
 import numpy as np
 import pandas as pd
@@ -18,11 +17,7 @@ COLUMNS = ["distance", "acceleration", "displacement", "force"]
 
 
 def get_files(pattern, path=DATA_DIR):
-    """Match a legacy filename regex; sort for a reproducible file order.
-
-    Sorting differs from the original os.listdir order and can change the
-    validation tail. Pass an explicit ordered list to read_data to replay it.
-    """
+    """Select legacy filenames by regex, with reproducible ordering."""
     files = sorted(p.name for p in Path(path).iterdir()
                    if p.is_file() and re.match(pattern, p.name))
     if not files:
@@ -30,74 +25,94 @@ def get_files(pattern, path=DATA_DIR):
     return files
 
 
-def read_data(file_list, path=DATA_DIR, cut_percent=0.05):
-    """Read four-column XLS files, trim each end, concatenate and drop NaNs.
-
-    cut_percent retains the meaning of the legacy misspelling cut_precent.
-    The notebooks use 0.1; the original helper default is 0.05.
-    """
-    if not file_list:
-        raise ValueError("Provide at least one data file.")
+def read_recording(filename, path=DATA_DIR, cut_percent=0.1):
+    """Read original values, retaining zero-based source rows as the index."""
     if not 0 <= cut_percent < 0.5:
         raise ValueError("cut_percent must be in [0, 0.5).")
-    frames = []
-    for filename in file_list:
-        # Deliberate compatibility: the old reader consumes row 1 as a header.
-        frame = pd.read_excel(Path(path) / filename, header=0)
-        if frame.shape[1] != 4:
-            raise ValueError(f"{filename}: expected the four-column legacy XLS data.")
-        frame.columns = COLUMNS
-        cut = int(len(frame) * cut_percent)
-        frames.append(frame.iloc[cut:len(frame) - cut])
-    frame = pd.concat(frames, ignore_index=True).dropna().reset_index(drop=True)
+    frame = pd.read_excel(Path(path) / filename, header=None)
+    if frame.shape[1] != 4:
+        raise ValueError(f"{filename}: expected four headerless columns.")
+    frame.columns = COLUMNS
+    cut = int(len(frame) * cut_percent)
+    frame = frame.iloc[cut:len(frame) - cut]
+    # Reject gaps rather than silently dropping rows and closing time intervals.
     if frame.empty or not np.isfinite(frame.to_numpy(dtype=float)).all():
-        raise ValueError("The selected data are empty or contain non-finite values.")
+        raise ValueError(f"{filename}: empty or non-finite data.")
     return frame
 
 
-def create_sequences(features, target, index, sequence_length=16):
-    """Return X[i:i+L], force[i+L], distance[i+L], without normalization.
-
-    The old MinMaxScaler result was unused; removing that dead calculation
-    leaves the returned values unchanged. Inputs have shape (N, L, 2).
-    """
+def create_sequences(features, target, index, sequence_length=16, stride=1):
+    """X[i:i+L] -> force[i+L]; stride subsamples targets, not observations."""
     features, target, index = map(np.asarray, (features, target, index))
-    if features.ndim != 2 or target.ndim != 1 or index.ndim != 1:
-        raise ValueError("Expected 2-D features and 1-D targets and indices.")
     if not len(features) == len(target) == len(index):
         raise ValueError("Features, targets and indices must have equal lengths.")
-    if sequence_length < 1 or len(features) <= sequence_length:
-        raise ValueError("sequence_length must be positive and shorter than the data.")
-    windows = [features[i:i + sequence_length]
-               for i in range(len(features) - sequence_length)]
-    return (np.asarray(windows), target[sequence_length:].copy(),
-            index[sequence_length:].copy())
+    if sequence_length < 2 or stride < 1 or len(features) <= sequence_length:
+        raise ValueError("Require L >= 2, stride >= 1 and more than L rows.")
+    starts = np.arange(0, len(features) - sequence_length, stride)
+    windows = np.stack([features[i:i + sequence_length] for i in starts])
+    return windows, target[starts + sequence_length], index[starts + sequence_length]
 
 
-def load_sequences(file_list, path=DATA_DIR, cut_percent=0.1, sequence_length=16):
-    """Shared loader for every baseline; retain legacy cross-recording windows."""
-    warnings.warn(
-        "Legacy protocol: header=0 discards the first XLS sample; no scaling is applied. "
-        "Files are concatenated before windowing, so windows can cross recording "
-        "boundaries. See legacy/README.md.", UserWarning, stacklevel=2,
-    )
-    frame = read_data(file_list, path, cut_percent)
-    return create_sequences(frame[["acceleration", "displacement"]],
-                            frame["force"], frame["distance"], sequence_length)
+def prepare_data(train_files, test_files, path=DATA_DIR, sequence_length=16,
+                 cut_percent=0.1, validation_fraction=0.15, train_stride=1,
+                 normalization=None):
+    """Return split arrays, target provenance, training statistics and dt.
 
-
-def split_sequences(X, y, validation_fraction=0.15):
-    """Reproduce Keras validation_split: reserve the final fraction of windows.
-
-    No random split or temporal gap is introduced. Neighboring training and
-    validation windows overlap in their inputs; this is not a clean holdout.
+    Each trimmed training recording reserves its final fraction of ROWS for
+    validation. Windows are built separately inside each partition. Test
+    recordings are held out entirely. Validation/test always use stride 1.
+    Physical dt is inferred from distance[m]/speed[m/s] and must be uniform;
+    constant speed and the filename units are explicit dataset assumptions.
     """
-    if len(X) != len(y) or not 0 < validation_fraction < 1:
-        raise ValueError("Require aligned arrays and validation_fraction in (0, 1).")
-    split = int(len(X) * (1 - validation_fraction))
-    if not 0 < split < len(X):
-        raise ValueError("The split must leave nonempty training and validation sets.")
-    warnings.warn("Legacy validation tail has overlapping input windows across the "
-                  "split boundary; validation MSE is not an independent holdout estimate.",
-                  UserWarning, stacklevel=2)
-    return X[:split], y[:split], X[split:], y[split:]
+    if not train_files or not test_files or set(train_files) & set(test_files):
+        raise ValueError("Require nonempty, disjoint train/test file lists.")
+    if not 0 < validation_fraction < 1:
+        raise ValueError("validation_fraction must be in (0, 1).")
+    segments = {"train": [], "validation": [], "test": []}
+    intervals = []
+    for filename in train_files + test_files:
+        frame = read_recording(filename, path, cut_percent)
+        speed = float(re.match(r"V(\d+)_", filename).group(1)) / 3.6
+        dt = np.diff(frame["distance"].to_numpy()) / speed
+        if not (dt > 0).all() or not np.allclose(dt, dt[0], rtol=1e-4, atol=1e-9):
+            raise ValueError(f"{filename}: the common fixed-grid experiment needs uniform dt.")
+        intervals.append(float(np.median(dt)))
+        if filename in train_files:
+            split = int(len(frame) * (1 - validation_fraction))
+            segments["train"].append((filename, frame.iloc[:split]))
+            segments["validation"].append((filename, frame.iloc[split:]))
+        else:
+            segments["test"].append((filename, frame))
+    if not np.allclose(intervals, intervals[0], rtol=1e-4, atol=1e-9):
+        raise ValueError("Recordings have different sample intervals.")
+    sample_interval = round(float(np.median(intervals)), 9)
+    if normalization is None:
+        training_rows = pd.concat([frame for _, frame in segments["train"]])
+        x = training_rows[["acceleration", "displacement"]].to_numpy(dtype=float)
+        y = training_rows["force"].to_numpy(dtype=float)
+        normalization = {"input_mean": x.mean(0).tolist(),
+                         "input_std": np.maximum(x.std(0), 1e-12).tolist(),
+                         "force_mean": float(y.mean()),
+                         "force_std": max(float(y.std()), 1e-12)}
+    arrays, metadata = {}, {}
+    for split_name, recordings in segments.items():
+        windows, targets, provenance = [], [], []
+        stride = train_stride if split_name == "train" else 1
+        for filename, frame in recordings:
+            features = frame[["acceleration", "displacement"]].to_numpy(dtype=float)
+            features = (features - normalization["input_mean"]) / normalization["input_std"]
+            force = frame["force"].to_numpy(dtype=float)
+            scaled_force = (force - normalization["force_mean"]) / normalization["force_std"]
+            X, y, rows = create_sequences(features, scaled_force, frame.index,
+                                          sequence_length, stride)
+            windows.append(X)
+            targets.append(y)
+            provenance.append(pd.DataFrame({
+                "file": filename, "source_row": rows,
+                "distance_m": frame["distance"].to_numpy()[sequence_length::stride],
+                "force_N": force[sequence_length::stride],
+            }))
+        arrays[split_name] = (np.concatenate(windows).astype(np.float32),
+                             np.concatenate(targets).astype(np.float32))
+        metadata[split_name] = pd.concat(provenance, ignore_index=True)
+    return arrays, metadata, normalization, sample_interval

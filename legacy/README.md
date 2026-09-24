@@ -1,5 +1,7 @@
 # Legacy inspection and migration audit
 
+**Historical scope:** this audit records the initial migration and its compatibility loader. The active implementation has since added PGND and a revised shared protocol (correct header handling, recording-local windows, row-disjoint validation, training-only standardization). Statements below about the "active"/"new" compatibility code or unimplemented PGND describe that earlier stage, not today's `src/`. See the [root README](../README.md) for current choices, commands and experiment results. Legacy sources and scientific findings below remain preserved.
+
 The import was actually named `old_project/` (not `old_code/`). All 355 files were inventoried, all notebook source variants were inspected, all 123 spreadsheets were parsed, and the previous paper and current manuscript were read before repository changes. The folder is now `legacy/`. Original data bytes and the root `main.tex` were preserved. The identical `papers/main.tex` copy was removed.
 
 ## Sources and classification
