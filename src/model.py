@@ -1,4 +1,4 @@
-"""PGND from main.tex, using its quadratic-potential special case.
+"""PGND from manuscript/main.tex, using its quadratic-potential special case.
 
 The first comparison resets every model on the same observation window and
 predicts the next force. Linear interpolation uses observed samples only;
@@ -63,11 +63,13 @@ class PGNDModel(nn.Module):
     Output: next-sample force (batch, 1). return_details also exposes the
     complete decoded trajectory and the manuscript's residual penalty.
     return_residual returns only (prediction, penalty) for efficient training.
+    observation_readout adds G(h_last) to the original latent-only prediction.
+    Intermediate readouts are diagnostics, not separately scored forecasts.
     """
 
     def __init__(self, latent_dim=16, encoding_dim=16, hidden_dim=32,
                  sample_interval=0.001, time_unit=0.001, method="rk4",
-                 step_size=1.0, rtol=1e-5, atol=1e-7):
+                 step_size=1.0, rtol=1e-5, atol=1e-7, observation_readout=False):
         super().__init__()
         if min(sample_interval, time_unit, step_size, rtol, atol) <= 0:
             raise ValueError("Time intervals, solver step and tolerances must be positive.")
@@ -83,6 +85,15 @@ class PGNDModel(nn.Module):
         self.dynamics = PGNDDynamics(latent_dim, encoding_dim, hidden_dim)
         self.decoder = nn.Sequential(nn.Linear(2 * latent_dim, hidden_dim),
                                      nn.Tanh(), nn.Linear(hidden_dim, 1))
+        # Construct after the original modules to preserve their seeded weights.
+        # Default False keeps historical PGND state_dicts and behavior unchanged.
+        self.direct_readout = None
+        if observation_readout:
+            self.direct_readout = nn.Sequential(
+                nn.Linear(encoding_dim, hidden_dim), nn.Tanh(), nn.Linear(hidden_dim, 1))
+            # The revised model initially predicts exactly the PGND-0 output.
+            nn.init.zeros_(self.direct_readout[-1].weight)
+            nn.init.zeros_(self.direct_readout[-1].bias)
 
     @staticmethod
     def interpolate(t, observation_times, encoded):
@@ -125,10 +136,16 @@ class PGNDModel(nn.Module):
         states = odeint(vector_field, initial, grid, method=self.method,
                         rtol=self.rtol, atol=self.atol, options=options).transpose(0, 1)
         if return_details:
-            forces = self.decoder(states).squeeze(-1)  # eq:force_decoder
+            forces = self.decoder(states).squeeze(-1)
+            if self.direct_readout is not None:
+                # Encodings at diagnostic state times; hold the final input.
+                h_at_states = torch.cat((encoded, encoded[:, -1:]), dim=1)
+                forces = forces + self.direct_readout(h_at_states).squeeze(-1)
             prediction = forces[:, -1:]
         else:
             prediction = self.decoder(states[:, -1])
+            if self.direct_readout is not None:
+                prediction = prediction + self.direct_readout(encoded[:, -1])
         if not (return_details or return_residual):
             return prediction
         h_at_states = torch.cat((encoded, encoded[:, -1:]), dim=1)

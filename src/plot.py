@@ -16,9 +16,11 @@ import numpy as np
 import pandas as pd
 
 
-LABELS = {"rnn": "RNN", "lstm": "LSTM", "gru": "GRU", "cnn_gru": "CNN–GRU", "pgnd": "PGND"}
+LABELS = {"rnn": "RNN", "lstm": "LSTM", "gru": "GRU", "cnn_gru": "CNN–GRU",
+          "pgnd": "PGND-0", "pgnd_obs": "PGND + direct", "direct": "Direct only"}
 COLORS = {"rnn": "#9467bd", "lstm": "#0072B2", "gru": "#009E73",
-          "cnn_gru": "#E69F00", "pgnd": "#D55E00"}
+          "cnn_gru": "#E69F00", "pgnd": "#D55E00", "pgnd_obs": "#CC79A7",
+          "direct": "#666666"}
 MARKERS = ("o", "s", "^", "D", "v", "P", "X")
 
 

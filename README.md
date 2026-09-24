@@ -1,6 +1,6 @@
 # Physics-Guided Neural Dynamics for Pantograph–Catenary Contact Force Estimation
 
-**PGND** is a research proof-of-concept for estimating contact force from panhead acceleration and displacement using physics-guided continuous-time latent dynamics. The code implements the original quadratic-potential, latent-only model (PGND-0 in the [manuscript](manuscript/main.tex)), alongside PyTorch RNN, LSTM, GRU, and CNN–GRU baselines. The revised manuscript proposes an observation-conditioned readout and a separate warm-up initialization study; these are not yet implemented or evaluated. Existing results concern finite-window, next-sample prediction, not streaming or robustness validation.
+**PGND** is a research proof-of-concept for estimating contact force from panhead acceleration and displacement using physics-guided continuous-time latent dynamics. The code implements the original quadratic-potential, latent-only model (PGND-0 in the [manuscript](manuscript/main.tex)), an optional observation-conditioned readout, its direct-only control, and PyTorch RNN, LSTM, GRU, and CNN–GRU baselines. Warm-up initialization remains unimplemented. Results concern finite-window, next-sample prediction, not streaming or robustness validation; the manuscript's result section remains provisional.
 
 ## Installation
 
@@ -16,7 +16,7 @@ Only PyTorch is used for learning; `torchdiffeq` supplies the ODE solver. `panda
 
 Original files remain unchanged in `data/Data/` (120 XLS files) and `data/data_old/` (3 older XLSX files). They are local and ignored by Git. Their provenance and column layouts are described in [data/README.md](data/README.md); the previous-paper/code discrepancies are recorded in [legacy/README.md](legacy/README.md).
 
-All five models use exactly the same `src/data.py` pipeline:
+All models use exactly the same `src/data.py` pipeline:
 
 1. Read each four-column XLS recording with `header=None`; keep distance, acceleration, displacement, force and original zero-based row indices. No additional filtering is applied. Non-finite data are rejected rather than closing time gaps.
 2. Retain the legacy 10% trim at **each** end. Reserve the final 15% of the remaining rows of **each training recording** for validation. Test recordings are held out entirely.
@@ -84,9 +84,9 @@ python -m src.train --model pgnd \
   --output "$RUN/pgnd/pgnd.pt"
 ```
 
-All models use Adam (betas 0.9/0.999, epsilon 1e-7), MSE and final-epoch weights. There is no early stopping, scheduler, clipping, weight decay, dropout or test-based selection. Defaults remain batch size 32 and training stride 1; the commands deliberately override them. Use stride 1 for full training targets only if changed consistently for all models in a new run.
+All models use Adam (betas 0.9/0.999, epsilon 1e-7) and MSE. New runs save both final-epoch weights and a separate `<model>.best.pt` selected by the lowest validation prediction MSE, without PGND's residual penalty. There is no early stopping, scheduler, clipping, weight decay, dropout or test-based selection. Defaults remain batch size 32 and training stride 1; the commands deliberately override them. Use stride 1 for full training targets only if changed consistently for all models in a new run.
 
-Before optimization, `<model>.run.json` records the run settings: ordered files/hashes, preprocessing/normalization, counts, seed, optimizer, device, and PGND architecture/solver settings. Each completed epoch is appended to `<model>.history.csv`, so an interrupted run keeps its completed history. Columns are `epoch`, `train_mse_scaled`, `val_mse_scaled`, `residual_loss`, `train_total_loss`, and `seconds`. MSE is in standardized-force units, not N²; PGND's total includes its residual penalty, whereas validation MSE does not. Training MSE averages minibatches during updates; validation MSE uses the end-of-epoch weights. The final `.pt` also contains the settings and full history. Interrupted histories are not resume checkpoints; choose a new output name to rerun. Existing checkpoint/history/settings files are never overwritten.
+Before optimization, `<model>.run.json` records the run settings: ordered files/hashes, preprocessing/normalization, counts, seed, optimizer, device, architecture/solver settings, and source-code hashes. Each completed epoch is appended to `<model>.history.csv`, so an interrupted run keeps its completed history. Columns are `epoch`, `train_mse_scaled`, `val_mse_scaled`, `residual_loss`, `train_total_loss`, and `seconds`. MSE is in standardized-force units, not N²; PGND's total includes its residual penalty, whereas validation MSE does not. Training MSE averages minibatches during updates; validation MSE uses the end-of-epoch weights. Both checkpoints retain the full history after completion and record the selected epoch and validation score. Best weights are saved whenever validation MSE improves; the final weights remain separate. Writes replace this run's checkpoint only after a temporary write completes. These are prediction checkpoints, not optimizer/resume snapshots. New runs reject existing checkpoint/history/settings paths.
 
 The baselines retain two 32-unit recurrent layers and a linear output; CNN–GRU adds a width-1 64-channel ReLU convolution. Trainable parameter counts are RNN 3,233; LSTM 12,833; GRU 9,825; CNN–GRU 15,969. The preserved Keras initializer families, LSTM forget bias and reset-after GRU are documented in the audit. Architecture equivalence does not imply bitwise Keras equivalence. PGND has fewer parameters and a different computation budget; equal epochs are not equal runtime or architecture-specific hyperparameter optimization.
 
@@ -132,11 +132,116 @@ python -m src.evaluate \
 The evaluator checks file hashes and matching protocol, splits, statistics, training budget and seed before comparing. It pools exactly the same test targets for each model and reports MAE (N), RMSE (N), the legacy MSE (N²), and R² (undefined for constant targets). The new evaluation directory contains:
 
 - `comparison.csv`: all models, including run name, model, seed, sample/parameter counts and metrics.
+- `per_recording.csv`: the same metrics for each individual test recording.
 - `<model>.metrics.csv`: final metrics for that model/run.
 - `<model>.predictions.csv`: filename, original zero-based source row, distance, ground-truth `force_N`, and `prediction_N` in newtons.
 - `<model>.history.csv`: the actual training history embedded in that checkpoint, bundled for plotting without loading weights.
 
 The run name is the checkpoint filename stem. Stems must be distinct in a comparison, even when checkpoints live in separate directories. Evaluation refuses an existing output directory; use a new name to reevaluate. The existing compatibility checks deliberately compare one matched seed/budget at a time, not aggregate multiple seeds into error bars. Outputs remain ignored by Git.
+
+Best-validation checkpoints must be compared with best-validation checkpoints;
+the evaluator rejects mixing them with final-epoch weights or evaluating an
+unfinished training budget. Historical checkpoints without selection metadata
+are treated as final-epoch checkpoints. `comparison.csv` records the checkpoint
+kind, selected epoch, and selected validation MSE; the configured `epochs`
+remains the total training budget, not the selected epoch.
+
+### Controlled readout comparison
+
+`--model pgnd` retains PGND-0 and can load its historical checkpoints.
+`--model pgnd_obs` adds `G(h_last)` to `H(z_target)` without changing the
+ODE, initialization, interpolation, residual loss, or information budget.
+The new head is 16→32→1 with tanh and a linear output. Its last layer starts
+at zero, so the revised model initially matches PGND-0 exactly under the same
+seed; the original modules are initialized before constructing the new head.
+It has 6,338 trainable parameters versus PGND-0's 5,761.
+
+`--model direct` uses only the last available acceleration/uplift pair, through
+the same 2→32→16 encoder and 16→32→1 head, without an ODE. Its output layer
+also starts at zero; it has 1,201 parameters. It receives the common windows
+but deliberately ignores earlier observations. This is a new architectural
+control, not a model recovered from the previous paper. Hidden MLP layers use
+PyTorch defaults; the direct-only and additive models do not have identical
+random hidden-head weights because their module-construction order differs.
+
+For the first readout test, keep 20 Hz, seed 0, 100 epochs, batch size 128,
+training stride 16, window length 16, and the existing split/scalers for every
+model. Run independent CLI jobs concurrently, not a multiprocessing trainer:
+
+```bash
+RUN=results/20hz_seed0_readout_20260925
+for model in lstm gru rnn cnn_gru pgnd pgnd_obs direct; do
+  mkdir -p "$RUN/$model"
+  nohup python -m src.train --model "$model" \
+    --train-pattern 'V(300|350|380)_Case[1-6]_CutFre20\.xls$' \
+    --test-pattern 'V(300|350|380)_Case[7-8]_CutFre20\.xls$' \
+    --epochs 100 --batch-size 128 --train-stride 16 --sequence-length 16 \
+    --seed 0 --device cuda --threads 1 --preload-data \
+    --output "$RUN/$model/$model.pt" > "$RUN/$model/train.log" 2>&1 &
+done
+wait
+
+python -m src.evaluate "$RUN"/*/*.best.pt \
+  --device cuda --threads 1 --preload-data --output-dir "$RUN/evaluation_best"
+python -m src.plot "$RUN/evaluation_best" --output-dir "$RUN/figures_best"
+```
+
+Use a new `RUN` directory when repeating. Check every training log and final
+checkpoint before evaluation; a shell `wait` alone does not validate all jobs.
+Concurrency depends on available GPU memory and other users' workloads.
+Concurrent epoch timings are not isolated per-model speed benchmarks. This
+first single-seed comparison is exploratory; no hyperparameter search, warm-up,
+longer window, or claim of physics-specific improvement is implied.
+
+### Completed remote readout comparison (seed 0)
+
+All seven independent model jobs completed the fixed 100-epoch budget on the
+RTX 3080 Ti. They ran concurrently, with one PyTorch CPU thread per job and no
+new DataLoader workers or multiprocessing trainer. Data, normalization,
+window/target construction, optimizer, batch order, and residual weight were
+unchanged. The best-validation comparison on 69,909 common test targets is:
+
+| Model | Selected epoch | MAE (N) | RMSE (N) | R² |
+| --- | ---: | ---: | ---: | ---: |
+| LSTM | 69 | 9.195668 | 12.146378 | 0.893405 |
+| GRU | 87 | 8.801481 | 11.646162 | 0.902004 |
+| RNN | 89 | 9.180285 | 12.211522 | 0.892259 |
+| CNN–GRU | 97 | 8.799322 | 11.760534 | 0.900070 |
+| PGND-0 | 91 | 8.513473 | 11.492430 | 0.904574 |
+| PGND + direct | 95 | 9.232672 | 12.248896 | 0.891598 |
+| Direct only | 94 | 13.601718 | 17.396340 | 0.781346 |
+
+**Checkpoint selection changes the ranking; the new readout does not improve
+it.** PGND-0 has 1.32% lower pooled RMSE than GRU and 2.28% lower than CNN–GRU
+in this run. It has lower RMSE than each of those two baselines on five of six
+recordings, and lower RMSE than the added-readout variant on all six. This
+modest, single-seed result is not a statistical-superiority or physics-causality
+claim. PGND-0 remains the default; `pgnd_obs` is retained as an explicit ablation.
+
+The separate final-epoch comparison reproduces all five original models'
+earlier metrics exactly. Final-epoch PGND-0 has RMSE 12.591375 N, PGND + direct
+12.540152 N, and CNN–GRU 12.141102 N. Comparing those numbers with selected
+checkpoints across models would mix selection rules and is not the main result.
+Further development should repeat best-validation comparisons across seeds
+and use fresh held-out simulations for confirmation, not tune on these test
+scores. The unstructured-ODE control is still pending.
+
+Artifacts are preserved locally and remotely under
+`results/20hz_seed0_readout_20260925/`: all 14 checkpoints, seven complete
+histories/logs/settings, `evaluation_best/`, `evaluation_final/`, four PDF plots
+in `figures_best/`, runtime versions, the exact launch/verification scripts,
+the executed source snapshot, and backups of replaced remote source files.
+No raw data or older experiment outputs were overwritten. The two PGND jobs
+each recorded about 20.5 minutes of training plus validation while running
+concurrently; these are not isolated runtime benchmarks.
+
+Remote checks verified original-model/zero-head equivalence, finite gradients,
+the direct-only input restriction, best-checkpoint preservation, historical
+checkpoint loading, matching data/source hashes, all seven selected validation
+scores from reloaded weights, and all 14 sets of metrics recomputed from saved
+predictions. No local training or model inference was run. The manuscript was
+not edited by this implementation/experiment step; its result text remains
+provisional and should not yet be treated as a final report of this study.
 
 ## Visualization
 

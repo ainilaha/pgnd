@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import torch
 
-from src.baselines import CNNGRU, GRU, LSTM, RNN
+from src.baselines import CNNGRU, GRU, LSTM, RNN, DirectReadout
 from src.data import DATA_DIR, prepare_data
 from src.model import PGNDModel
 
@@ -66,6 +66,15 @@ def main():
     reference = checkpoints[0]
     if reference["protocol"] != "recording-split-training-standardization-v1":
         raise ValueError("Retrain historical checkpoints under the shared revised protocol.")
+    for checkpoint in checkpoints:
+        # Legacy checkpoints have final weights and no selection metadata.
+        kind = checkpoint.get("checkpoint_kind", "final_epoch")
+        if kind not in ("final_epoch", "best_validation"):
+            raise ValueError(f"Unknown checkpoint selection rule: {kind}")
+        if kind != reference.get("checkpoint_kind", "final_epoch"):
+            raise ValueError("Do not mix best-validation and final-epoch checkpoints.")
+        if checkpoint.get("completed_epochs", checkpoint["epochs"]) != checkpoint["epochs"]:
+            raise ValueError("Training budget is incomplete; wait for the run to finish.")
     # Reject incompatible comparisons, including different training subsets/scales.
     for checkpoint in checkpoints[1:]:
         for field in ("protocol", "train_files", "test_files", "data_settings", "normalization",
@@ -83,7 +92,7 @@ def main():
         X = torch.as_tensor(X, dtype=torch.float32, device=args.device)
     target = metadata["test"]["force_N"].to_numpy()
     args.output_dir.mkdir(parents=True)
-    results = []
+    results, recording_results = [], []
     for path, checkpoint in zip(args.checkpoints, checkpoints):
         name = checkpoint["model"]
         if name == "rnn":
@@ -94,14 +103,20 @@ def main():
             model = GRU()
         elif name == "cnn_gru":
             model = CNNGRU()
-        elif name == "pgnd":
+        elif name in ("pgnd", "pgnd_obs"):
             model = PGNDModel(**checkpoint["model_options"])
+        elif name == "direct":
+            model = DirectReadout(**checkpoint["model_options"])
         else:
             raise ValueError(f"Unsupported model: {name}")
         model.load_state_dict(checkpoint["state_dict"])
         prediction = predict(model, X, device=args.device).astype(np.float64)
         prediction = prediction * normalization["force_std"] + normalization["force_mean"]
         row = {"run": path.stem, "model": name, "seed": checkpoint["seed"], "samples": len(target),
+               "checkpoint_kind": checkpoint.get("checkpoint_kind", "final_epoch"),
+               "selected_epoch": checkpoint.get("selected_epoch", checkpoint["epochs"]),
+               "validation_mse_scaled": checkpoint.get(
+                   "selected_val_mse", checkpoint["history"][-1]["val_mse_scaled"]),
                "parameters": sum(p.numel() for p in model.parameters() if p.requires_grad),
                **force_metrics(target, prediction)}
         results.append(row)
@@ -112,8 +127,14 @@ def main():
         predictions = metadata["test"].copy()
         predictions["prediction_N"] = prediction
         predictions.to_csv(args.output_dir / f"{path.stem}.predictions.csv", index=False)
+        for filename, recording in predictions.groupby("file", sort=False):
+            recording_results.append({
+                "run": path.stem, "model": name, "file": filename, "samples": len(recording),
+                **force_metrics(recording["force_N"], recording["prediction_N"]),
+            })
     table = pd.DataFrame(results)
     table.to_csv(args.output_dir / "comparison.csv", index=False)
+    pd.DataFrame(recording_results).to_csv(args.output_dir / "per_recording.csv", index=False)
     print(table.to_string(index=False, float_format=lambda value: f"{value:.6f}"))
 
 

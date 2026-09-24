@@ -14,16 +14,23 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
-from src.baselines import CNNGRU, GRU, LSTM, RNN
+from src.baselines import CNNGRU, GRU, LSTM, RNN, DirectReadout
 from src.data import DATA_DIR, get_files, prepare_data
 from src.evaluate import mean_squared_error, predict
 from src.model import PGNDModel
 
 
+def save_checkpoint(checkpoint, path):
+    """Replace only this run's checkpoint after a complete temporary write."""
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    torch.save(checkpoint, temporary)
+    temporary.replace(path)
+
+
 def fit(model, X_train, y_train, X_val, y_val, epochs=20, batch_size=32,
         seed=0, device="cpu", learning_rate=0.001, residual_weight=0.001,
-        history_path=None, preload_data=False):
-    """Adam and final-epoch weights; no early stopping or test-set selection.
+        history_path=None, preload_data=False, checkpoint=None, best_path=None):
+    """Adam with a fixed epoch budget and best-validation prediction-MSE saving.
 
     MSE is in standardized-force units. PGND adds the manuscript's residual
     penalty; baselines have no residual term. Minibatch order has its own seed.
@@ -31,6 +38,8 @@ def fit(model, X_train, y_train, X_val, y_val, epochs=20, batch_size=32,
     """
     if epochs < 1 or batch_size < 1 or residual_weight < 0:
         raise ValueError("Require positive epochs/batch size and nonnegative residual weight.")
+    if (checkpoint is None) != (best_path is None):
+        raise ValueError("Provide both checkpoint metadata and best_path, or neither.")
     device = torch.device(device)
     model.to(device)
     train_inputs = torch.as_tensor(X_train, dtype=torch.float32)
@@ -50,6 +59,7 @@ def fit(model, X_train, y_train, X_val, y_val, epochs=20, batch_size=32,
                                  lr=learning_rate, betas=(0.9, 0.999), eps=1e-7)
     loss_fn = nn.MSELoss()
     history = []
+    best_mse, best_checkpoint = float("inf"), None
     for epoch in range(1, epochs + 1):
         if device.type == "cuda":
             torch.cuda.synchronize(device)
@@ -95,19 +105,38 @@ def fit(model, X_train, y_train, X_val, y_val, epochs=20, batch_size=32,
                 if epoch == 1:
                     writer.writeheader()
                 writer.writerow(row)
+        if best_path is not None and val_mse < best_mse:
+            best_mse = val_mse
+            best_checkpoint = {
+                **checkpoint, "checkpoint_kind": "best_validation",
+                "selected_epoch": epoch, "completed_epochs": epoch,
+                "selection_metric": "val_mse_scaled", "selected_val_mse": val_mse,
+                "state_dict": {name: value.detach().cpu().clone()
+                               for name, value in model.state_dict().items()},
+                "history": list(history),
+            }
+            save_checkpoint(best_checkpoint, best_path)
         print(f"Epoch {epoch}/{epochs}: mse={row['train_mse_scaled']:.6g}, "
               f"residual={row['residual_loss']:.6g}, val_mse={val_mse:.6g}, "
               f"seconds={row['seconds']:.2f}", flush=True)
+    if best_checkpoint is not None:
+        # Keep the selected weights, but retain the full completed history for plots.
+        best_checkpoint.update(history=history, completed_epochs=epochs)
+        save_checkpoint(best_checkpoint, best_path)
+        print(f"Best validation epoch: {best_checkpoint['selected_epoch']}, "
+              f"mse={best_mse:.6g}; saved {best_path}", flush=True)
     return history
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--model", required=True, choices=["rnn", "lstm", "gru", "cnn_gru", "pgnd"])
+    parser.add_argument("--model", required=True,
+                        choices=["rnn", "lstm", "gru", "cnn_gru", "pgnd", "pgnd_obs", "direct"])
     parser.add_argument("--train-pattern", required=True, help="Regex for training-pool filenames")
     parser.add_argument("--test-pattern", required=True, help="Regex for held-out test filenames")
     parser.add_argument("--data-dir", type=Path, default=DATA_DIR)
-    parser.add_argument("--output", type=Path, required=True, help="New .pt checkpoint path")
+    parser.add_argument("--output", type=Path, required=True,
+                        help="New final .pt checkpoint path; also writes <stem>.best.pt")
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--sequence-length", type=int, default=16)
@@ -132,7 +161,10 @@ def main():
     args = parser.parse_args()
     history_path = args.output.with_suffix(".history.csv")
     settings_path = args.output.with_suffix(".run.json")
-    if any(path.exists() for path in (args.output, history_path, settings_path)):
+    best_path = args.output.with_suffix(".best.pt")
+    if args.output.suffix != ".pt":
+        parser.error("--output must end in .pt")
+    if any(path.exists() for path in (args.output, best_path, history_path, settings_path)):
         raise FileExistsError(f"Choose a new output path: {args.output}")
     torch.set_num_threads(args.threads)
     torch.manual_seed(args.seed)
@@ -160,11 +192,16 @@ def main():
         model = GRU()
     elif args.model == "cnn_gru":
         model = CNNGRU()
+    elif args.model == "direct":
+        model_options = {"encoding_dim": args.encoding_dim, "hidden_dim": args.hidden_dim}
+        model = DirectReadout(**model_options)
     else:
         model_options = {"latent_dim": args.latent_dim, "encoding_dim": args.encoding_dim,
                          "hidden_dim": args.hidden_dim, "sample_interval": dt,
                          "time_unit": args.time_unit, "method": args.ode_method,
                          "step_size": args.ode_step, "rtol": args.rtol, "atol": args.atol}
+        if args.model == "pgnd_obs":
+            model_options["observation_readout"] = True
         model = PGNDModel(**model_options)
     checkpoint = {
         "model": args.model, "model_options": model_options,
@@ -175,22 +212,29 @@ def main():
         "data_settings": settings, "normalization": normalization, "sample_interval": dt,
         "window_counts": counts, "seed": args.seed, "epochs": args.epochs,
         "batch_size": args.batch_size, "threads": args.threads, "device": args.device,
-        "preload_data": args.preload_data, "implementation": "cached-dynamics-v1",
-        "residual_weight": args.residual_weight if args.model == "pgnd" else 0.0,
+        "preload_data": args.preload_data, "implementation": "observation-readout-best-v1",
+        "checkpoint_selection": "minimum_validation_force_mse",
+        "residual_weight": args.residual_weight if isinstance(model, PGNDModel) else 0.0,
         "optimizer": {"name": "Adam", "lr": args.learning_rate, "betas": (0.9, 0.999), "eps": 1e-7},
         "torch_version": str(torch.__version__),
+        "source_sha256": {path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+                          for path in sorted(Path(__file__).parent.glob("*.py"))},
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    # Plain metadata is readable without loading PyTorch weights. A checkpoint
-    # is written only after all epochs finish; partial histories are not resumable.
+    # Metadata is readable without PyTorch. Best weights survive interruption,
+    # but these prediction checkpoints do not contain optimizer/resume state.
     with settings_path.open("x") as stream:
         json.dump(checkpoint, stream, indent=2)
         stream.write("\n")
     history = fit(model, *arrays["train"], *arrays["validation"], args.epochs,
                   args.batch_size, args.seed, args.device, args.learning_rate,
-                  args.residual_weight, history_path=history_path, preload_data=args.preload_data)
-    checkpoint.update(state_dict=model.cpu().state_dict(), history=history)
-    torch.save(checkpoint, args.output)
+                  args.residual_weight, history_path=history_path, preload_data=args.preload_data,
+                  checkpoint=checkpoint, best_path=best_path)
+    checkpoint.update(state_dict=model.cpu().state_dict(), history=history,
+                      checkpoint_kind="final_epoch", selected_epoch=args.epochs,
+                      completed_epochs=args.epochs, selection_metric=None,
+                      selected_val_mse=history[-1]["val_mse_scaled"])
+    save_checkpoint(checkpoint, args.output)
     print(f"Saved final-epoch weights and settings to {args.output}", flush=True)
 
 
