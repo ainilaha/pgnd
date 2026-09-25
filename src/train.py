@@ -14,7 +14,7 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
-from src.baselines import CNNGRU, GRU, LSTM, RNN, DirectReadout
+from src.baselines import CNNGRU, GRU, LSTM, RNN
 from src.data import DATA_DIR, get_files, prepare_data
 from src.evaluate import mean_squared_error, predict
 from src.model import PGNDModel
@@ -131,7 +131,7 @@ def fit(model, X_train, y_train, X_val, y_val, epochs=20, batch_size=32,
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", required=True,
-                        choices=["rnn", "lstm", "gru", "cnn_gru", "pgnd", "pgnd_obs", "direct"])
+                        choices=["rnn", "lstm", "gru", "cnn_gru", "pgnd"])
     parser.add_argument("--train-pattern", required=True, help="Regex for training-pool filenames")
     parser.add_argument("--test-pattern", required=True, help="Regex for held-out test filenames")
     parser.add_argument("--data-dir", type=Path, default=DATA_DIR)
@@ -192,16 +192,11 @@ def main():
         model = GRU()
     elif args.model == "cnn_gru":
         model = CNNGRU()
-    elif args.model == "direct":
-        model_options = {"encoding_dim": args.encoding_dim, "hidden_dim": args.hidden_dim}
-        model = DirectReadout(**model_options)
     else:
         model_options = {"latent_dim": args.latent_dim, "encoding_dim": args.encoding_dim,
                          "hidden_dim": args.hidden_dim, "sample_interval": dt,
                          "time_unit": args.time_unit, "method": args.ode_method,
                          "step_size": args.ode_step, "rtol": args.rtol, "atol": args.atol}
-        if args.model == "pgnd_obs":
-            model_options["observation_readout"] = True
         model = PGNDModel(**model_options)
     checkpoint = {
         "model": args.model, "model_options": model_options,
@@ -212,7 +207,7 @@ def main():
         "data_settings": settings, "normalization": normalization, "sample_interval": dt,
         "window_counts": counts, "seed": args.seed, "epochs": args.epochs,
         "batch_size": args.batch_size, "threads": args.threads, "device": args.device,
-        "preload_data": args.preload_data, "implementation": "observation-readout-best-v1",
+        "preload_data": args.preload_data, "implementation": "core-models-v1",
         "checkpoint_selection": "minimum_validation_force_mse",
         "residual_weight": args.residual_weight if isinstance(model, PGNDModel) else 0.0,
         "optimizer": {"name": "Adam", "lr": args.learning_rate, "betas": (0.9, 0.999), "eps": 1e-7},

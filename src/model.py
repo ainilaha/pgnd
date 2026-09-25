@@ -63,7 +63,8 @@ class PGNDModel(nn.Module):
     Output: next-sample force (batch, 1). return_details also exposes the
     complete decoded trajectory and the manuscript's residual penalty.
     return_residual returns only (prediction, penalty) for efficient training.
-    observation_readout adds G(h_last) to the original latent-only prediction.
+    observation_readout retains G(h_last) for historical checkpoint evaluation;
+    it is not exposed by the normal training CLI.
     Intermediate readouts are diagnostics, not separately scored forecasts.
     """
 

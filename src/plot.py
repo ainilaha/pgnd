@@ -17,10 +17,13 @@ import pandas as pd
 
 
 LABELS = {"rnn": "RNN", "lstm": "LSTM", "gru": "GRU", "cnn_gru": "CNN–GRU",
-          "pgnd": "PGND-0", "pgnd_obs": "PGND + direct", "direct": "Direct only"}
+          "pgnd": "PGND-0", "pgnd_obs": "PGND + direct", "direct": "Direct only",
+          "pgnd_modal": "Modal PGND (candidate)", "history_linear": "History linear",
+          "history_mlp": "History MLP"}
 COLORS = {"rnn": "#9467bd", "lstm": "#0072B2", "gru": "#009E73",
           "cnn_gru": "#E69F00", "pgnd": "#D55E00", "pgnd_obs": "#CC79A7",
-          "direct": "#666666"}
+          "direct": "#666666", "pgnd_modal": "#882255", "history_linear": "#44AA99",
+          "history_mlp": "#332288"}
 MARKERS = ("o", "s", "^", "D", "v", "P", "X")
 
 

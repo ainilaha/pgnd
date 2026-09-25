@@ -1,5 +1,16 @@
 # Legacy inspection and migration audit
 
+## Later PGND pilot archive
+
+`pgnd_experiments.py` retains the unsuccessful PGND modal/direct/history
+pilots, not models from the previous paper. Only the checkpoint-compatibility
+branch in `src/evaluate.py` imports this frozen PyTorch file; the current
+trainer does not. [experiment_notes.md](experiment_notes.md) preserves the
+former root README with the full experiment record and research proposals.
+No pilot weights, predictions or results were deleted during this separation.
+
+## Original migration record
+
 **Historical scope:** this audit records the initial migration and its compatibility loader. The active implementation has since added PGND and a revised shared protocol (correct header handling, recording-local windows, row-disjoint validation, training-only standardization). Statements below about the "active"/"new" compatibility code or unimplemented PGND describe that earlier stage, not today's `src/`. See the [root README](../README.md) for current choices, commands and experiment results. Legacy sources and scientific findings below remain preserved.
 
 The import was actually named `old_project/` (not `old_code/`). All 355 files were inventoried, all notebook source variants were inspected, all 123 spreadsheets were parsed, and the previous paper and current manuscript were read before repository changes. The folder is now `legacy/`. Original data bytes and the root `main.tex` were preserved. The identical `papers/main.tex` copy was removed.

@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import torch
 
-from src.baselines import CNNGRU, GRU, LSTM, RNN, DirectReadout
+from src.baselines import CNNGRU, GRU, LSTM, RNN
 from src.data import DATA_DIR, prepare_data
 from src.model import PGNDModel
 
@@ -54,8 +54,10 @@ def main():
     parser.add_argument("--output-dir", type=Path, required=True, help="New directory for CSV results")
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--threads", type=int, default=1)
+    parser.add_argument("--split", choices=["validation", "test"], default="test",
+                        help="Use validation during method development; test remains the default")
     parser.add_argument("--preload-data", action="store_true",
-                        help="Keep prepared test inputs on the selected device")
+                        help="Keep inputs for the evaluated split on the selected device")
     args = parser.parse_args()
     if args.output_dir.exists():
         raise FileExistsError(f"Choose a new results directory: {args.output_dir}")
@@ -87,10 +89,10 @@ def main():
     arrays, metadata, normalization, _ = prepare_data(
         reference["train_files"], reference["test_files"], args.data_dir,
         normalization=reference["normalization"], **reference["data_settings"])
-    X, _ = arrays["test"]
+    X, _ = arrays[args.split]
     if args.preload_data:
         X = torch.as_tensor(X, dtype=torch.float32, device=args.device)
-    target = metadata["test"]["force_N"].to_numpy()
+    target = metadata[args.split]["force_N"].to_numpy()
     args.output_dir.mkdir(parents=True)
     results, recording_results = [], []
     for path, checkpoint in zip(args.checkpoints, checkpoints):
@@ -105,14 +107,22 @@ def main():
             model = CNNGRU()
         elif name in ("pgnd", "pgnd_obs"):
             model = PGNDModel(**checkpoint["model_options"])
-        elif name == "direct":
-            model = DirectReadout(**checkpoint["model_options"])
+        elif name in ("direct", "history_linear", "history_mlp", "pgnd_modal"):
+            # Archived pilots: load old weights without expanding normal training.
+            from legacy.pgnd_experiments import DirectReadout, HistoryReadout, ModalPGND
+            if name == "direct":
+                model = DirectReadout(**checkpoint["model_options"])
+            elif name == "pgnd_modal":
+                model = ModalPGND(**checkpoint["model_options"])
+            else:
+                model = HistoryReadout(**checkpoint["model_options"])
         else:
             raise ValueError(f"Unsupported model: {name}")
         model.load_state_dict(checkpoint["state_dict"])
         prediction = predict(model, X, device=args.device).astype(np.float64)
         prediction = prediction * normalization["force_std"] + normalization["force_mean"]
-        row = {"run": path.stem, "model": name, "seed": checkpoint["seed"], "samples": len(target),
+        row = {"run": path.stem, "model": name, "seed": checkpoint["seed"],
+               "split": args.split, "samples": len(target),
                "checkpoint_kind": checkpoint.get("checkpoint_kind", "final_epoch"),
                "selected_epoch": checkpoint.get("selected_epoch", checkpoint["epochs"]),
                "validation_mse_scaled": checkpoint.get(
@@ -124,12 +134,13 @@ def main():
         # Bundle the checkpoint's actual history, not an unrelated sidecar file.
         pd.DataFrame(checkpoint["history"]).to_csv(
             args.output_dir / f"{path.stem}.history.csv", index=False)
-        predictions = metadata["test"].copy()
+        predictions = metadata[args.split].copy()
         predictions["prediction_N"] = prediction
         predictions.to_csv(args.output_dir / f"{path.stem}.predictions.csv", index=False)
         for filename, recording in predictions.groupby("file", sort=False):
             recording_results.append({
-                "run": path.stem, "model": name, "file": filename, "samples": len(recording),
+                "run": path.stem, "model": name, "split": args.split,
+                "file": filename, "samples": len(recording),
                 **force_metrics(recording["force_N"], recording["prediction_N"]),
             })
     table = pd.DataFrame(results)

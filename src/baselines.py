@@ -89,24 +89,3 @@ class CNNGRU(nn.Module):
         x = torch.relu(self.convolution(x.transpose(1, 2))).transpose(1, 2)
         sequence, _ = self.recurrent(x)
         return self.output(sequence[:, -1])
-
-
-class DirectReadout(nn.Module):
-    """PGND's encoder and direct readout, without an ODE or history processing.
-
-    This new ablation uses only the last available acceleration/uplift pair.
-    It is not a baseline recovered from the previous paper. PyTorch default
-    initialization matches PGND's MLP family; the final output starts at zero.
-    """
-
-    def __init__(self, encoding_dim=16, hidden_dim=32):
-        super().__init__()
-        self.encoder = nn.Sequential(nn.Linear(2, hidden_dim), nn.Tanh(),
-                                     nn.Linear(hidden_dim, encoding_dim))
-        self.direct_readout = nn.Sequential(
-            nn.Linear(encoding_dim, hidden_dim), nn.Tanh(), nn.Linear(hidden_dim, 1))
-        nn.init.zeros_(self.direct_readout[-1].weight)
-        nn.init.zeros_(self.direct_readout[-1].bias)
-
-    def forward(self, x):
-        return self.direct_readout(self.encoder(x[:, -1]))
