@@ -1,6 +1,6 @@
 """PyTorch versions of the four main paper baselines.
 
-Reference: legacy/rnn_fre20-20.ipynb and the saved Keras model configurations.
+Architectures and initializers are unchanged from Git commit bf4c1857.
 Each model takes (batch, time, 2) and returns (batch, 1), using a fresh zero
 recurrent state for each window. No dropout or output activation is used.
 """

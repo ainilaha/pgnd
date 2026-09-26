@@ -2,6 +2,4 @@ numpy
 pandas
 matplotlib
 torch
-torchdiffeq
 xlrd
-openpyxl

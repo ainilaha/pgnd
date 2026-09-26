@@ -22,8 +22,19 @@ checkpoints/
 *.keras
 *.h5
 
-# Retained historical run artifacts stay local
-legacy/history/
+# Generated artifacts and temporary outputs
+outputs/
+logs/
+*.log
+*.npz
+*.npy
+*.predictions.csv*
+*.history.csv
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.tmp
+*.swp
 
 # Local datasets (keep documentation)
 data/*
@@ -32,8 +43,3 @@ data/*
 # Generated results (keep the directory)
 results/*
 !results/.gitkeep
-# Keep the bounded ablation instructions, not any experiment outputs.
-!results/priority123_plan/
-results/priority123_plan/*
-!results/priority123_plan/run.sh
-!results/priority123_plan/protocol.md
