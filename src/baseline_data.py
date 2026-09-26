@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from src.data import INPUTS, Recording, normalize
+from src.data import INPUTS, Recording, distance_spacing, normalize
 from src.sampling import validate_mask
 
 
@@ -16,16 +16,15 @@ def trim_recording(recording, fraction):
 
 
 def linear_interpolate(recording, mask):
-    """Interpolate raw sensors between retained observations at original times.
+    """Interpolate raw sensors on the original distance grid in meters.
 
     Both endpoints must be retained; no extrapolation or force values are used.
     This recording-level preprocessing uses right-hand (future) observations,
     so the irregular baseline input is non-causal even with preceding windows.
     """
     validate_mask(recording, mask)
-    t = recording.samples["time_s"].to_numpy(dtype=float)
-    if not np.isfinite(t).all() or not (np.diff(t) > 0).all():
-        raise ValueError("Interpolation requires finite, strictly increasing timestamps.")
+    distance = recording.samples["distance"].to_numpy(dtype=float)
+    distance_spacing(distance)
     keep = mask.to_numpy()
     filled = recording.samples[INPUTS].copy()
     for column in INPUTS:
@@ -33,7 +32,7 @@ def linear_interpolate(recording, mask):
         if not np.isfinite(values).all():
             raise ValueError("Retained sensor observations must be finite.")
         if not keep.all():
-            filled.loc[~mask, column] = np.interp(t[~keep], t[keep], values)
+            filled.loc[~mask, column] = np.interp(distance[~keep], distance[keep], values)
     return filled
 
 
@@ -51,9 +50,9 @@ def make_windows(recording, statistics, sequence_length, stride=1, *, mask=None)
     if (not isinstance(sequence_length, int) or not isinstance(stride, int)
             or not 2 <= sequence_length < len(frame) or stride < 1):
         raise ValueError("Require integer 2 <= L < recording rows and stride >= 1.")
-    dt = np.diff(frame["time_s"].to_numpy())
-    if not (dt > 0).all() or not np.allclose(dt, dt[0], rtol=1e-4, atol=1e-9):
-        raise ValueError("Conventional baseline windows require a regular time grid.")
+    ds = distance_spacing(frame["distance"])
+    if not np.allclose(ds, ds[0], rtol=1e-4, atol=1e-9):
+        raise ValueError("Conventional baseline windows require a regular distance grid.")
     if not (np.diff(frame.index.to_numpy()) == 1).all():
         raise ValueError("Baseline windows must not bridge omitted source rows.")
     x, y = normalize(recording, statistics)
@@ -62,7 +61,7 @@ def make_windows(recording, statistics, sequence_length, stride=1, *, mask=None)
         x = (filled - statistics["input_mean"]) / statistics["input_std"]
     positions = np.arange(sequence_length, len(frame), stride)
     windows = np.stack([x[k - sequence_length:k] for k in positions]).astype(np.float32)
-    targets = frame.iloc[positions][["time_s", "distance_m", "force_N"]].reset_index()
+    targets = frame.iloc[positions][["distance", "force_N"]].reset_index()
     targets.insert(0, "file", recording.name)
     targets.insert(1, "split", recording.split)
     return windows, y[positions].astype(np.float32), targets

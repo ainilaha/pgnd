@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import torch
 
-from src.data import INPUTS, Recording, fit_normalization, normalize, recording_info
+from src.data import INPUTS, Recording, distance_spacing, fit_normalization, normalize, recording_info
 from src.sampling import observation_mask, retained_observations, validate_mask
 from src.baseline_data import linear_interpolate, make_windows, trim_recording
 from src.baselines import CNNGRU, GRU, LSTM, RNN
@@ -19,7 +19,7 @@ from src import plot
 def recording(n=103, case=1, offset=0):
     k = np.arange(n)
     name = f"V300_Case{case}_CutFre20.xls"
-    frame = pd.DataFrame({"time_s": 3. + k * .001, "distance_m": 250. + k / 12,
+    frame = pd.DataFrame({"distance": 250. + k / 12,
                           "acceleration": np.sin(k / 5) + offset,
                           "uplift": np.cos(k / 7) - offset,
                           "force_N": 180. + k * 3.},
@@ -110,7 +110,7 @@ class SamplingTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 linear_interpolate(r, bad)
 
-    def test_original_timestamps_and_complete_targets_are_unchanged(self):
+    def test_original_distances_and_complete_targets_are_unchanged(self):
         r = recording(case=7)
         original = r.samples.copy(deep=True)
         stats = fit_normalization([recording()])
@@ -119,11 +119,17 @@ class SamplingTests(unittest.TestCase):
             for retention in (1., .8, .6):
                 mask = observation_mask(r, retention, pattern)
                 observed = retained_observations(r, mask, stats)
-                self.assertEqual(list(observed.columns), ["time_s", *INPUTS])
-                np.testing.assert_array_equal(observed.time_s, original.loc[mask, "time_s"])
+                self.assertEqual(list(observed.columns), ["distance", *INPUTS])
+                np.testing.assert_array_equal(observed.distance, original.loc[mask, "distance"])
+                np.testing.assert_array_equal(distance_spacing(observed.distance),
+                                              np.diff(original.loc[mask, "distance"]))
                 np.testing.assert_array_equal(observed.index, original.index[mask])
                 self.assertEqual(len(observed), mask.sum())
-                self.assertEqual(observed.attrs, {"file": r.name, "split": "test"})
+                self.assertEqual(observed.attrs["file"], r.name)
+                self.assertEqual(observed.attrs["split"], "test")
+                self.assertEqual(observed.attrs["units"],
+                                 {"distance": "m", "acceleration": "standardized",
+                                  "uplift": "standardized"})
                 x, y, targets = make_windows(r, stats, 8, mask=mask)
                 np.testing.assert_array_equal(y, clean_y)
                 pd.testing.assert_frame_equal(targets, clean_targets)
@@ -152,9 +158,9 @@ class SamplingTests(unittest.TestCase):
         mask.iloc[1:12] = False
         mask.iloc[14:-1] = False
         filled = linear_interpolate(r, mask)
-        t = r.samples.time_s.to_numpy()
+        distance = r.samples.distance.to_numpy()
         for left, right in ((0, 12), (13, 24)):
-            weight = (t[left:right + 1] - t[left]) / (t[right] - t[left])
+            weight = (distance[left:right + 1] - distance[left]) / (distance[right] - distance[left])
             a, b = r.samples[INPUTS].iloc[[left, right]].to_numpy()
             expected = a + weight[:, None] * (b - a)
             np.testing.assert_allclose(filled.iloc[left:right + 1], expected, rtol=1e-12)
@@ -166,17 +172,20 @@ class SamplingTests(unittest.TestCase):
         expected = (filled.iloc[5:9].to_numpy() - stats["input_mean"]) / stats["input_std"]
         np.testing.assert_array_equal(x[5], expected.astype(np.float32))
 
-    def test_interpolation_weights_use_timestamps_not_row_numbers(self):
+    def test_interpolation_and_retained_spacing_use_distance_not_row_numbers(self):
         r = recording(5)
-        r.samples["time_s"] = [10., 10.1, 10.5, 11.5, 12.]
+        r.samples["distance"] = [10., 10.1, 10.5, 11.5, 12.]
         mask = observation_mask(r, 1., "random")
         mask.iloc[1:-1] = False
         a, b = r.samples[INPUTS].iloc[[0, -1]].to_numpy()
         expected = a + np.array([0., .05, .25, .75, 1.])[:, None] * (b - a)
         np.testing.assert_allclose(linear_interpolate(r, mask), expected, rtol=1e-12)
-        for bad_times in ([10., 11., 11., 12., 13.], [10., 11., np.nan, 12., 13.],
-                          [10., 9., 11., 12., 13.]):
-            r.samples["time_s"] = bad_times
+        observed = retained_observations(r, mask, fit_normalization([r]))
+        np.testing.assert_array_equal(observed.distance, [10., 12.])
+        np.testing.assert_array_equal(distance_spacing(observed.distance), [2.])
+        for bad_distances in ([10., 11., 11., 12., 13.], [10., 11., np.nan, 12., 13.],
+                              [10., 9., 11., 12., 13.]):
+            r.samples["distance"] = bad_distances
             with self.assertRaises(ValueError):
                 linear_interpolate(r, mask)
 
@@ -252,10 +261,10 @@ class SamplingTests(unittest.TestCase):
                     self.assertEqual(len(fig.axes), 3)
                     for ax, column in zip(fig.axes[:2], INPUTS):
                         self.assertEqual(len(ax.lines), 3)
-                        np.testing.assert_array_equal(ax.lines[0].get_xdata(), shown.distance_m)
+                        np.testing.assert_array_equal(ax.lines[0].get_xdata(), shown.distance)
                         np.testing.assert_array_equal(ax.lines[0].get_ydata(), shown[column])
                         np.testing.assert_array_equal(ax.lines[1].get_ydata(), filled.loc[shown.index, column])
-                        np.testing.assert_array_equal(ax.lines[2].get_xdata(), shown.loc[keep, "distance_m"])
+                        np.testing.assert_array_equal(ax.lines[2].get_xdata(), shown.loc[keep, "distance"])
                         np.testing.assert_array_equal(ax.lines[2].get_ydata(), shown.loc[keep, column])
                         self.assertEqual([line.get_label() for line in ax.lines],
                                          ["Original", "Interpolated", "Retained"])
@@ -265,7 +274,7 @@ class SamplingTests(unittest.TestCase):
                     force_ax = fig.axes[2]
                     self.assertEqual(len(force_ax.lines), 1)
                     self.assertEqual(len(force_ax.patches), 0)
-                    np.testing.assert_array_equal(force_ax.lines[0].get_xdata(), shown.distance_m)
+                    np.testing.assert_array_equal(force_ax.lines[0].get_xdata(), shown.distance)
                     np.testing.assert_array_equal(force_ax.lines[0].get_ydata(), shown.force_N)
                     self.assertEqual([ax.get_ylabel() for ax in fig.axes],
                                      [r"Acceleration [m/s$^2$]", "Uplift [m]", "Contact force [N]"])

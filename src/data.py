@@ -10,6 +10,7 @@ import pandas as pd
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "Data"
 INPUTS = ["acceleration", "uplift"]
+UNITS = {"distance": "m", "acceleration": "m/s^2", "uplift": "m", "force_N": "N"}
 FILENAME = re.compile(r"V(300|350|380)_Case([1-8])_CutFre(20|50|100|150|200)\.xls")
 
 
@@ -17,8 +18,9 @@ FILENAME = re.compile(r"V(300|350|380)_Case([1-8])_CutFre(20|50|100|150|200)\.xl
 class Recording:
     """One recording; samples retain original zero-based Excel rows as their index.
 
-    Columns: distance_m, acceleration, uplift, force_N, time_s. Treat samples
-    as read-only. Adapters return separate copies instead of changing raw data.
+    Columns: distance, acceleration, uplift, force_N. Distance is the original
+    XLS coordinate in meters, never a derived clock. Treat samples as read-only.
+    Adapters return separate copies instead of changing raw data.
     """
 
     name: str
@@ -39,22 +41,36 @@ def recording_info(name):
 def load_recording(path):
     """Read ALL rows without trimming, filtering, resampling or dropping values.
 
-    Files contain distance, not a clock. time_s = distance_m / (speed_kmh/3.6)
-    assumes constant speed and the filename's units. Keep the original origin.
+    The first column is distance in meters. Preserve its exact values and origin;
+    do not derive timestamps from nominal speed or reconstruct a uniform grid.
     """
     path = Path(path)
-    speed, _, _, split = recording_info(path.name)
+    _, _, _, split = recording_info(path.name)
     frame = pd.read_excel(path, header=None)
     if frame.shape[1] != 4 or len(frame) < 2:
         raise ValueError(f"{path.name}: expected at least two rows and four headerless columns.")
     if not np.isfinite(frame.to_numpy(dtype=float)).all():
         raise ValueError(f"{path.name}: non-finite values; raw rows must not be discarded.")
-    frame.columns = ["distance_m", *INPUTS, "force_N"]
+    frame.columns = ["distance", *INPUTS, "force_N"]
     frame.index.name = "source_row"
-    frame["time_s"] = frame["distance_m"].to_numpy(dtype=float) / (speed / 3.6)
-    if not (np.diff(frame["time_s"]) > 0).all():
-        raise ValueError(f"{path.name}: timestamps must be strictly increasing.")
+    frame.attrs["units"] = UNITS.copy()
+    distance_spacing(frame["distance"])
     return Recording(path.name, split, frame)
+
+
+def distance_spacing(distance):
+    """Consecutive coordinate differences in meters; no origin reset or scaling.
+
+    Works for complete grids and retained observations. Return N-1 positive
+    intervals, never an invented interval before the first observation.
+    """
+    distance = np.asarray(distance, dtype=float)
+    if distance.ndim != 1 or len(distance) < 2 or not np.isfinite(distance).all():
+        raise ValueError("Require at least two finite distance values in meters.")
+    spacing = np.diff(distance)
+    if not (spacing > 0).all():
+        raise ValueError("Distance must be strictly increasing within each recording.")
+    return spacing
 
 
 def load_recordings(path=DATA_DIR, *, cutoff):

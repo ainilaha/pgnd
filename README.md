@@ -3,7 +3,7 @@
 **PGND** is a research project for contact-force estimation from acceleration
 and uplift. This repository contains complete simulated-data infrastructure,
 shared irregular-observation masks and verified conventional baselines.
-Continuous-time models will be rebuilt separately; no PGND, Neural ODE or
+Continuous-coordinate models will be rebuilt separately; no PGND, Neural ODE or
 training entry point is currently implemented.
 
 ## Installation
@@ -24,7 +24,7 @@ ODE library, configuration framework or experiment manager is required.
 src/
 ├── AGENTS.md
 ├── data.py           # complete recordings and train-only normalization
-├── sampling.py       # shared masks and retained-only timestamped observations
+├── sampling.py       # shared masks and retained distances/sensors
 ├── baseline_data.py  # explicit trim, linear interpolation and regular windows
 ├── baselines.py      # unchanged CNN–GRU, GRU, LSTM, RNN
 ├── metrics.py        # regression and removed-only interpolation errors
@@ -50,21 +50,25 @@ directories or new model packages.
 concatenated stream or window dataset. Each has a filename, split, and a table
 indexed by the original zero-based source row, with these aligned columns:
 
-`distance_m, acceleration, uplift, force_N, time_s`
+`distance, acceleration, uplift, force_N`
 
 The loader reads all four headerless source columns without trimming, filtering,
 normalizing, removing rows or imputing values. `uplift` is the source displacement
-column, renamed without conversion. Invalid/non-finite rows and non-increasing
-time fail explicitly. See [data/README.md](data/README.md) for raw-data provenance.
+column, renamed without conversion. `distance` is exactly the original first
+XLS column in **meters**, with its original origin and precision. Units are
+documented in `samples.attrs["units"]`. Invalid/non-finite rows and non-increasing
+distance fail explicitly. Nonuniform coordinates are preserved, not repaired.
+See [data/README.md](data/README.md) for raw-data provenance.
 
 The **established whole-case split** is fixed across speeds and cutoff variants:
 cases 1–4 train, 5–6 validation, 7–8 test. There is no random row split. The older
 within-recording 15% validation-tail protocol is not an active option; its saved
 LSTM/RNN test predictions were checked separately during cleanup.
 
-Files supply distance rather than timestamps. `time_s = distance_m / (speed/3.6)`
-uses the speed in the filename, assumes constant speed, metres and km/h, and
-preserves the original origin. The inferred interval is approximately 1 ms.
+Files supply distance, not a clock. **No synthetic timestamps are created.**
+Nominal speed stays filename metadata, not a coordinate-conversion rule.
+`distance_spacing(recording.samples.distance)` returns all N−1 positive
+coordinate differences in meters, without adding an interval before the first row.
 `CutFre20` is a filter label, **not** a 20 Hz sampling rate. Other cutoff files
 also change force values and must not be treated as identical ground truth.
 
@@ -74,7 +78,8 @@ The verified clean alignment is **`X[k-L:k] -> force[k]`**: L preceding sensor r
 excluding target-time sensors. On clean data this is one-step-ahead prediction, not the
 inclusive-current-sample reconstruction sometimes used in notation. Windows
 are constructed separately inside each recording; recurrent state resets per
-window. The adapter checks regular time spacing and consecutive source rows.
+window. The adapter checks regular distance spacing (`rtol=1e-4`, `atol=1e-9 m`)
+and consecutive source rows; it never replaces the original coordinate values.
 For irregular inputs, interpolation can introduce future sensor information
 into those same preceding rows, as detailed below.
 
@@ -101,7 +106,7 @@ x, y, targets = make_windows(training[0], statistics, sequence_length=64, stride
 
 ## Irregular observations (data pipeline only)
 
-The study concerns continuous-time dynamics, not imputation. `sampling.py` is
+The study concerns dynamics over a continuous distance coordinate, not imputation. `sampling.py` is
 the **only mask generator**. Create a mask once per recording/condition and pass
 that same object to each model's adapter. Acceleration and uplift share the mask.
 The generator never reads sensor or force values. Masks preserve file identity,
@@ -117,9 +122,10 @@ split and source-row indexing; adapters reject mismatched masks.
   both endpoint anchors. Masks are nested across retention levels for a fixed seed.
 - `bursty`: randomly place nonoverlapping **8-sample bursts** by default, with
   at least one observed row between bursts. One shorter burst supplies any
-  remainder needed for the exact count. At the inferred 1 ms interval, eight
-  removed samples span eight missing grid cells (about 8 ms). The elapsed time
-  between observations surrounding such a burst is nine intervals. Burst length
+  remainder needed for the exact count. Eight removed samples create nine
+  original distance intervals between the retained endpoints. The actual gap
+  is their coordinate difference in **meters**, not a synthetic time duration.
+  The same missing-row count need not span the same distance across speeds. Burst length
   is an explicit argument; burst masks at different retentions are not nested.
 - NumPy PCG64 is seeded by a stable SHA-256 digest of filename, starting row,
   segment length, seed and pattern. Results do not depend on model RNGs or the
@@ -137,16 +143,16 @@ raw recording remains unchanged. Use the same chosen segment for future ODEs.
 Fit normalization once on the complete, unmasked training segments, then freeze
 it across patterns, retention levels and models. Do not fit on retained-only or
 interpolated rows. The baseline adapter uses standard linear interpolation only,
-at the original timestamps and before the original windows are formed. Each
+on the original distance grid and before the original windows are formed. Each
 missing value is weighted between its nearest retained left/right observations.
 Retained values remain untouched; force values are never used in interpolation.
 There is no alternative imputation, mask/time input channel, learned imputation
 or change to baseline models.
 
 **This is offline, non-causal preprocessing:** a right-hand sensor observation
-may occur at or after the force target time. The window indices remain unchanged,
+may occur at or beyond the force target distance. The window indices remain unchanged,
 but this pipeline must not be described as strictly causal prediction. A future
-comparison with a causal continuous-time model must explicitly disclose this
+comparison with a causal continuous-coordinate model must explicitly disclose this
 difference in available information; identical masks alone do not remove it.
 
 ```python
@@ -159,14 +165,26 @@ observations = retained_observations(segment, mask, statistics)
 ```
 
 `x` is the interpolated, normalized two-channel baseline input. `observations` contains
-**only** retained `time_s, acceleration, uplift`, normalized with the same
-statistics and carrying original row IDs. Time is never reset or resampled, and
-force is never an observation input. All force values/timestamps stay complete in
-`segment.samples`; `y` and `targets` are identical across mask conditions.
-Window warm-up exclusions remain unchanged. A future ODE must score those same
-target rows, consume only retained observations at their original times (without
-filling), and state its observation-access protocol explicitly. No ODE
-implementation or model experiment is included yet.
+**only** retained `distance, acceleration, uplift`, carrying
+original row IDs. Only the two sensors are normalized with the same training
+statistics; distance remains in meters. Intervals are computed from consecutive
+retained distances when needed, not stored as an additional field or feature.
+No distance or gap feature is added to the existing RNN-family inputs.
+Force is never an observation input.
+
+Complete distance and force remain in `segment.samples`; `y` and `targets` and
+window warm-up exclusions are identical across mask conditions. A future ODE
+must score those same rows and consume retained sensors and their actual
+distances without filling. Its independent coordinate will be **distance**,
+`dz(s)/ds = f(z(s), s)`, not synthetic time. No continuous-coordinate model or
+distance-aware recurrent baseline is implemented here.
+
+API correction: `distance_m` is now named `distance`, and `time_s` is removed
+from recordings and target/prediction metadata. There is no compatibility alias
+that silently recreates a clock. Clean baseline feature/target arrays are
+unchanged. Distance-based and previous constant-speed time-based linear
+interpolation are mathematically equivalent; small floating-point differences
+on irregular inputs are checked and reported, not treated as a new method.
 
 ## Models and evaluation
 
@@ -200,7 +218,7 @@ scores, predictions = evaluate(
 
 `scores` contains `mae`, `rmse`, `mse`, `r2`; errors are in N (MSE in N²).
 The generic metric function uses float64, with NaN R² for constant targets.
-`predictions` retains file, split, source row, time, distance, force and prediction.
+`predictions` retains file, split, source row, distance, force and prediction.
 Use identical target rows and protocols for comparisons. The old experiment
 CLI/checkpoint-reconstruction machinery was deliberately removed; there is no
 automatic support for experimental model identifiers or tail-split validation.
@@ -217,9 +235,8 @@ are overwritten. Plotting performs no model execution or data processing.
 `plot_sampling(recording, mask, filled, output_dir, ...)` shows three aligned
 panels: acceleration [m/s²], uplift [m], and complete contact-force truth [N].
 Units are documented from the reference paper in `data/README.md`. The x-axis
-uses **Distance [m]**, the original recorded coordinate, instead of inferred
-time. This is a display-only change: `time_s` and time-based interpolation stay
-unchanged. Input panels show the original signal, retained observations, lightly
+uses **Distance [m]**, the original recorded coordinate used by the data and
+interpolation interfaces. Input panels show the original signal, retained observations, lightly
 shaded missing cells, and the output of `baseline_data.linear_interpolate`.
 Only markers are thinned to at most 80 per input panel for legibility; no signal
 rows or masks change. Force is plotted in full without masking, interpolation,
@@ -232,7 +249,8 @@ reproduction script are kept in `results/sampling_linear_seed0/`:
 python results/sampling_linear_seed0/generate.py
 ```
 
-The script checks the 24 CutFre20 recordings at all six pattern/retention
+The script audits all 120 complete XLS recordings against the native cell values,
+then checks the 24 CutFre20 recordings at all six pattern/retention
 combinations, with the established 10% end trimming, without training or model
 inference. It overwrites the six overview PDFs with the full trimmed example
 recording and adds four `_zoom.pdf` views for random/bursty 80%/60%. All zooms
@@ -255,10 +273,32 @@ The same script writes lightweight sensor-distortion tables in that directory:
 These measure interpolation distortion, **not contact-force prediction error**.
 At 100% retention there are no removed rows: input identity is checked exactly,
 and missing-only MAE/RMSE are undefined (empty CSV cells), not reported as zero.
-`interpolation_checks.json` records checks, source/data/mask hashes, units via
-the tables, and selected figure rows; the previous `verification.json` is kept
-unchanged. The generator also verifies all existing mask hashes, unchanged
-complete force targets/timestamps, exact retained values, and clean-window identity.
+The earlier `verification.json`, `interpolation_checks.json` and interpolation
+error CSVs are preserved as historical evidence; the script verifies that new
+interpolation errors agree to numerical precision instead of overwriting them.
+The current `distance_checks.json` records checks and hashes. The pre-change
+`baseline_input_reference.json` freezes clean-window hashes; all features,
+standardized targets, target row IDs, force and distance values must match exactly.
+This checks numeric compatibility independently of the coordinate-column rename.
+`coordinate_compatibility.json` records measured interpolation round-off against
+the pre-change adapter; these are sensor-input differences, not force-prediction errors.
+
+Spatial reports (all distances in meters):
+
+- `raw_distance_spacing.csv`: one row per complete XLS recording, with exact
+  source alignment, strict monotonicity and mean/std/min/max/median Δs.
+- `observation_distance_spacing.csv`: one row per trimmed recording/condition,
+  describing Δs between consecutive retained observations and maximum missing-row count.
+- `observation_distance_summary.csv`: pooled actual intervals by nominal speed,
+  pattern and retention across all splits. Population std and median are computed
+  from intervals, not averages of per-recording summaries. No boundary intervals
+  join recordings; no artificial first-row interval is added. `max_m` is the
+  maximum **retained-endpoint separation**, including ordinary steps at 100%.
+
+The generator verifies all existing mask hashes, unchanged complete force and
+distance, exact retained values, and clean-window identity. It reports any
+unavailable trained-checkpoint recheck explicitly; synthetic predictions and
+identical input hashes do not constitute a new saved-checkpoint evaluation.
 `src.evaluate.evaluate` remains the clean-checkpoint utility; no new experimental
 runner or irregular-model evaluation mode has been added in this step.
 

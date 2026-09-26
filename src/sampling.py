@@ -5,7 +5,7 @@ import hashlib
 import numpy as np
 import pandas as pd
 
-from src.data import INPUTS, normalize
+from src.data import INPUTS, UNITS, normalize
 
 
 def observation_mask(recording, retention, pattern, *, seed=0, burst_length=8):
@@ -63,15 +63,18 @@ def validate_mask(recording, mask):
 
 
 def retained_observations(recording, mask, statistics):
-    """Normalized (time_s, acceleration, uplift) at retained rows ONLY.
+    """Retained distance, acceleration and uplift only; no filling or force input.
 
-    No force channel, filling, re-timing or new scaler fit. Source-row IDs and
-    original timestamps remain intact; complete targets stay in recording.
-    Use the SAME training statistics as the baseline window adapter.
+    Only acceleration/uplift are normalized, using the SAME training statistics
+    as the baseline. Original distances remain exact integration coordinates;
+    compute intervals from them when needed, never store gaps as model features.
+    Complete distance/force rows stay in recording.
     """
     validate_mask(recording, mask)
     x, _ = normalize(recording, statistics)
-    observed = recording.samples.loc[mask, ["time_s", *INPUTS]].copy()
+    observed = recording.samples.loc[mask, ["distance", *INPUTS]].copy()
     observed[INPUTS] = x[mask.to_numpy()]
-    observed.attrs = {"file": recording.name, "split": recording.split}
+    observed.attrs = {"file": recording.name, "split": recording.split,
+                      "units": {"distance": UNITS["distance"],
+                                "acceleration": "standardized", "uplift": "standardized"}}
     return observed

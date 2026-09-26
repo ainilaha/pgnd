@@ -68,7 +68,7 @@ def plot_force(predictions, labels, colors, recording, start, points, output_dir
     if (not predictions or not len(predictions) == len(labels) == len(colors)
             or start < 0 or points < 1):
         raise ValueError("Require labeled predictions, nonnegative start and positive points.")
-    columns = ["file", "split", "source_row", "time_s", "distance_m", "force_N"]
+    columns = ["file", "split", "source_row", "distance", "force_N"]
     reference = predictions[0].reset_index(drop=True)
     predictions = [frame.reset_index(drop=True) for frame in predictions]
     for frame in predictions[1:]:
@@ -81,10 +81,10 @@ def plot_force(predictions, labels, colors, recording, start, points, output_dir
     if not (selected["source_row"].diff().dropna() == 1).all():
         raise ValueError("Force curves require consecutive source rows.")
     fig, ax = plt.subplots(figsize=(9, 5), layout="constrained")
-    ax.plot(selected["distance_m"], selected["force_N"], color="black",
+    ax.plot(selected["distance"], selected["force_N"], color="black",
             linewidth=2, label="Ground truth")
     for i, (frame, label, color) in enumerate(zip(predictions, labels, colors)):
-        ax.plot(selected["distance_m"], frame.loc[selected.index, "prediction_N"],
+        ax.plot(selected["distance"], frame.loc[selected.index, "prediction_N"],
                 color=color, linestyle="--", label=label, marker=MARKERS[i % len(MARKERS)],
                 markersize=4, markerfacecolor="none", markevery=max(1, len(selected) // 15))
     ax.set_ylabel("Contact force (N)")
@@ -102,7 +102,7 @@ def plot_sampling(recording, mask, filled, output_dir, *, start=0, points=200,
 
     Three aligned panels: acceleration, uplift, and complete force ground truth.
     Units follow the reference paper, Figs. 7 and 11; see data/README.md.
-    Display original distance, not time inferred from nominal speed. Shading
+    Display the original distance in meters. Shading
     marks missing sensor cells only. Neither force nor source data are changed.
     """
     from src.sampling import validate_mask
@@ -114,7 +114,7 @@ def plot_sampling(recording, mask, filled, output_dir, *, start=0, points=200,
     if len(frame) < 2:
         raise ValueError("Not enough rows in the diagnostic segment.")
     keep = mask.loc[frame.index].to_numpy()
-    distance = frame.distance_m.to_numpy()
+    distance = frame.distance.to_numpy()
     edges = np.r_[distance[0] - (distance[1] - distance[0]) / 2,
                   (distance[:-1] + distance[1:]) / 2,
                   distance[-1] + (distance[-1] - distance[-2]) / 2]
@@ -151,5 +151,6 @@ def plot_sampling(recording, mask, filled, output_dir, *, start=0, points=200,
     axes[-1].set_xlabel("Distance [m]")
     fig.suptitle(f"{recording.name} | {mask.attrs['pattern']} | requested retention "
                  f"{mask.attrs['retention']:.0%}\n"
-                 f"Whole segment: {mask.mean():.2%} retained; displayed: {keep.mean():.1%}", fontsize=11)
+                 f"Retained: {mask.mean():.2%} (view: {keep.mean():.1%}); max observation gap: "
+                 f"{np.diff(recording.samples.loc[mask, 'distance']).max():.4f} m", fontsize=10)
     save_figure(fig, output_dir, name)

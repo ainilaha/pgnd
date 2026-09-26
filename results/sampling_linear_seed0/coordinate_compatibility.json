@@ -1,0 +1,28 @@
+{
+  "purpose": "Coordinate-only migration check; not force prediction metrics",
+  "reference": "baseline_input_reference.json",
+  "seed": 0,
+  "conditions": 144,
+  "sensor_rows_compared_per_channel": 1790634,
+  "max_abs_difference_physical_units": {
+    "acceleration": 2.248867758680717e-12,
+    "uplift": 4.718447854656915e-16
+  },
+  "units": {
+    "acceleration": "m/s^2",
+    "uplift": "m"
+  },
+  "max_abs_difference_normalized_float32": {
+    "acceleration": 7.275957614183426e-12,
+    "uplift": 0.0
+  },
+  "changed_normalized_float32_values": {
+    "acceleration": 1,
+    "uplift": 0
+  },
+  "retained_values_exact": true,
+  "clean_100_percent_values_exact": true,
+  "baseline_source_sha256": "cb2334bb9ac7680d1cf458639e6fd37ec1888d35d4e2438b33ecf6fd66376665",
+  "trained_predictions_rechecked": false,
+  "limitation": "Previously verified CNN-GRU checkpoint is inaccessible in macOS Trash. Clean tensor hashes and unchanged model code prove input compatibility; only synthetic model predictions were directly retested."
+}

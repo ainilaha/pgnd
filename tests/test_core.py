@@ -11,7 +11,7 @@ import torch
 
 from src.baseline_data import make_windows, trim_recording
 from src.baselines import CNNGRU, GRU, LSTM, RNN
-from src.data import Recording, fit_normalization, load_recording, load_recordings, normalize, recording_info
+from src.data import Recording, distance_spacing, fit_normalization, load_recording, load_recordings, normalize, recording_info
 from src.evaluate import evaluate, predict
 from src.metrics import regression_metrics
 from src import plot
@@ -25,25 +25,40 @@ def recording(case=1, rows=20, offset=0):
 
 
 class DataTests(unittest.TestCase):
-    def test_all_raw_rows_columns_and_time_are_aligned(self):
+    def test_all_raw_rows_columns_and_distance_are_aligned(self):
         r = recording()
         f = r.samples
-        self.assertEqual(f.shape, (20, 5))
+        self.assertEqual(f.shape, (20, 4))
+        self.assertEqual(list(f.columns), ["distance", "acceleration", "uplift", "force_N"])
         self.assertEqual(list(f.index), list(range(20)))
         self.assertEqual(f.index.name, "source_row")
         np.testing.assert_array_equal(f.acceleration, np.arange(20))
         np.testing.assert_array_equal(f.uplift, 2 * np.arange(20))
         np.testing.assert_array_equal(f.force_N, 100 + 3 * np.arange(20))
-        np.testing.assert_allclose(f.time_s, np.arange(20) * .001, rtol=1e-14)
-        self.assertTrue((np.diff(f.time_s) > 0).all())
+        np.testing.assert_array_equal(f.distance, np.arange(20) / 12)
+        self.assertTrue((distance_spacing(f.distance) > 0).all())
+        self.assertEqual(f.attrs["units"]["distance"], "m")
 
-    def test_headerless_read_and_original_time_origin(self):
+    def test_headerless_read_and_original_distance_origin(self):
         raw = pd.DataFrame([[100, 1, 2, 3], [101, 4, 5, 6]])
         with patch("src.data.pd.read_excel", return_value=raw) as read:
             r = load_recording("V300_Case1_CutFre20.xls")
         read.assert_called_once_with(Path(r.name), header=None)
-        self.assertAlmostEqual(r.samples.time_s.iloc[0], 1.2)
+        np.testing.assert_array_equal(r.samples.distance, [100, 101])
         np.testing.assert_array_equal(r.samples.force_N, [3, 6])
+
+    def test_distance_spacing_is_exact_and_nonuniform_coordinates_are_preserved(self):
+        distance = np.array([100., 100.25, 101., 103.])
+        np.testing.assert_array_equal(distance_spacing(distance), [.25, .75, 2.])
+        raw = pd.DataFrame({0: distance, 1: np.ones(4), 2: np.ones(4), 3: np.ones(4)})
+        with patch("src.data.pd.read_excel", return_value=raw):
+            r = load_recording("V380_Case1_CutFre20.xls")
+        np.testing.assert_array_equal(r.samples.distance, distance)
+        for invalid in ([1.], [1., 1.], [2., 1.], [1., np.nan], [[1., 2.]]):
+            with self.assertRaises(ValueError):
+                distance_spacing(invalid)
+        with self.assertRaises(ValueError):
+            make_windows(r, fit_normalization([r]), 2)
 
     def test_invalid_raw_data_is_rejected_not_repaired(self):
         for values in ([[1, 2, 3]], [[1, 2, 3, 4]], [[1, 2, np.nan, 4], [2, 3, 4, 5]],
@@ -188,6 +203,20 @@ class BaselineTests(unittest.TestCase):
         for records in ([], [train, heldout[0]], [heldout[0], heldout[0]]):
             with self.assertRaises(ValueError):
                 evaluate(CNNGRU(), records, stats, 4, cut_percent=.1)
+
+    def test_clean_baseline_predictions_do_not_use_distance_as_a_feature(self):
+        r = recording()
+        stats = fit_normalization([r])
+        expected, y, targets = make_windows(r, stats, 4)
+        changed = Recording(r.name, r.split, r.samples.copy())
+        changed.samples["distance"] = 100. + 2 * changed.samples.distance
+        x, changed_y, changed_targets = make_windows(changed, stats, 4)
+        np.testing.assert_array_equal(x, expected)
+        np.testing.assert_array_equal(changed_y, y)
+        np.testing.assert_array_equal(changed_targets.source_row, targets.source_row)
+        for cls in (CNNGRU, GRU, LSTM, RNN):
+            model = cls().eval()
+            np.testing.assert_array_equal(predict(model, x), predict(model, expected))
 
 
 class MetricTests(unittest.TestCase):
