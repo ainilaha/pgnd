@@ -9,6 +9,7 @@ from pathlib import Path
 import matplotlib
 matplotlib.use("Agg")  # Headless remote servers; set before importing pyplot.
 import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
 from matplotlib.ticker import MaxNLocator
 import numpy as np
 
@@ -93,3 +94,62 @@ def plot_force(predictions, labels, colors, recording, start, points, output_dir
     ax.set_title(f"{recording}\nSource rows {selected.source_row.iloc[0]}–{selected.source_row.iloc[-1]}")
     save_figure(fig, output_dir, "force_predictions")
     print(f"Force plot: {recording}, {len(selected)} targets, offset {start}")
+
+
+def plot_sampling(recording, mask, filled, output_dir, *, start=0, points=200,
+                  name="sampling"):
+    """Plot supplied raw signals/mask/interpolated sensors without transforming them.
+
+    Three aligned panels: acceleration, uplift, and complete force ground truth.
+    Units follow the reference paper, Figs. 7 and 11; see data/README.md.
+    Display original distance, not time inferred from nominal speed. Shading
+    marks missing sensor cells only. Neither force nor source data are changed.
+    """
+    from src.sampling import validate_mask
+
+    validate_mask(recording, mask)
+    if not filled.index.equals(recording.samples.index) or start < 0 or points < 2:
+        raise ValueError("Need aligned filled rows, nonnegative start and at least two points.")
+    frame = recording.samples.iloc[start:start + points]
+    if len(frame) < 2:
+        raise ValueError("Not enough rows in the diagnostic segment.")
+    keep = mask.loc[frame.index].to_numpy()
+    distance = frame.distance_m.to_numpy()
+    edges = np.r_[distance[0] - (distance[1] - distance[0]) / 2,
+                  (distance[:-1] + distance[1:]) / 2,
+                  distance[-1] + (distance[-1] - distance[-2]) / 2]
+    transitions = np.diff(np.r_[False, ~keep, False].astype(int))
+    gaps = list(zip(np.flatnonzero(transitions == 1), np.flatnonzero(transitions == -1)))
+    fig, axes = plt.subplots(3, 1, figsize=(9, 7), sharex=True)
+    # Fixed margins and limits give all six conditions the same plotting area.
+    fig.subplots_adjust(left=.12, right=.985, bottom=.08, top=.84, hspace=.2)
+    for ax, column in zip(axes[:2], ("acceleration", "uplift")):
+        for left, right in gaps:
+            ax.axvspan(edges[left], edges[right], color="0.9", linewidth=0, zorder=0)
+        ax.plot(distance, frame[column], color="0.25", linewidth=1.5, label="Original")
+        ax.plot(distance, filled.loc[frame.index, column], color="#D55E00",
+                linestyle="--", linewidth=1.2, label="Interpolated")
+        ax.plot(distance[keep], frame[column].to_numpy()[keep], linestyle="none", marker="o",
+                markersize=2.5, markeredgewidth=.7, markerfacecolor="none", color="#0072B2",
+                markevery=max(1, int(np.ceil(keep.sum() / 80))), label="Retained")
+    axes[2].plot(distance, frame.force_N, color="0.25", linewidth=1.5,
+                 label="Complete ground truth")
+    axes[2].set_title("Complete contact-force ground truth", loc="left", fontsize=9)
+    labels = (r"Acceleration [m/s$^2$]", "Uplift [m]", "Contact force [N]")
+    for ax, column, label in zip(axes, ("acceleration", "uplift", "force_N"), labels):
+        # Use the complete displayed signal, never a mask-dependent autoscale.
+        low, high = frame[column].min(), frame[column].max()
+        padding = .08 * (high - low) if high > low else .08 * max(abs(low), 1.)
+        ax.set_ylim(low - padding, high + padding)
+        ax.set_xlim(edges[0], edges[-1])
+        ax.set_ylabel(label)
+        ax.grid(alpha=.15)
+    fig.align_ylabels(axes)
+    handles = [*axes[0].lines, Patch(facecolor="0.9", label="Missing sensor intervals")]
+    fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(.55, .935),
+               ncol=2, frameon=False, fontsize=9)
+    axes[-1].set_xlabel("Distance [m]")
+    fig.suptitle(f"{recording.name} | {mask.attrs['pattern']} | requested retention "
+                 f"{mask.attrs['retention']:.0%}\n"
+                 f"Whole segment: {mask.mean():.2%} retained; displayed: {keep.mean():.1%}", fontsize=11)
+    save_figure(fig, output_dir, name)

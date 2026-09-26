@@ -1,10 +1,10 @@
 # Physics-Guided Neural Dynamics for Pantograph–Catenary Contact Force Estimation
 
 **PGND** is a research project for contact-force estimation from acceleration
-and uplift. This repository currently contains only complete simulated-data
-infrastructure and verified conventional baselines. Continuous-time models
-will be rebuilt separately; no PGND, Neural ODE, irregular-sampling generator
-or training entry point is currently implemented.
+and uplift. This repository contains complete simulated-data infrastructure,
+shared irregular-observation masks and verified conventional baselines.
+Continuous-time models will be rebuilt separately; no PGND, Neural ODE or
+training entry point is currently implemented.
 
 ## Installation
 
@@ -24,17 +24,21 @@ ODE library, configuration framework or experiment manager is required.
 src/
 ├── AGENTS.md
 ├── data.py           # complete recordings and train-only normalization
-├── baseline_data.py  # explicit baseline trim and regular windows
+├── sampling.py       # shared masks and retained-only timestamped observations
+├── baseline_data.py  # explicit trim, linear interpolation and regular windows
 ├── baselines.py      # unchanged CNN–GRU, GRU, LSTM, RNN
-├── metrics.py        # scalar MAE, RMSE, MSE, R²
+├── metrics.py        # regression and removed-only interpolation errors
 ├── evaluate.py       # clean baseline inference, metrics and target provenance
 └── plot.py           # small PDF plotting functions
 tests/
 ├── test_core.py      # synthetic checks, no training
+├── test_sampling.py  # shared masks, interpolation, clean-path equivalence
 └── BASELINE_VERIFICATION.md
 ```
 
-Raw local data are in `data/`; generated artifacts belong in ignored `results/`.
+Raw local data are in `data/`; result records belong in version-controlled
+`results/`. Figures, metrics, verification records, reproduction scripts, run logs
+and histories are tracked; checkpoints, caches and bulk predictions remain ignored.
 The manuscript in `manuscript/` and reference PDFs in `papers/` are preserved,
 but the draft does not describe the current baseline-only software. Historical
 code is in Git, not an active `legacy/` tree. There are no empty configs/scripts
@@ -66,11 +70,13 @@ also change force values and must not be treated as identical ground truth.
 
 ## Baseline adapter and normalization
 
-The verified alignment is **`X[k-L:k] -> force[k]`**: L preceding sensor rows,
-excluding target-time sensors. This is one-step-ahead prediction, not the
+The verified clean alignment is **`X[k-L:k] -> force[k]`**: L preceding sensor rows,
+excluding target-time sensors. On clean data this is one-step-ahead prediction, not the
 inclusive-current-sample reconstruction sometimes used in notation. Windows
 are constructed separately inside each recording; recurrent state resets per
 window. The adapter checks regular time spacing and consecutive source rows.
+For irregular inputs, interpolation can introduce future sensor information
+into those same preceding rows, as detailed below.
 
 For the established clean CNN–GRU reference, explicitly trim `floor(0.1*N)`
 rows from each end, use L=64 and training target stride 16. Validation/test use
@@ -92,6 +98,75 @@ training = [trim_recording(r, 0.1) for r in recordings if r.split == "train"]
 statistics = fit_normalization(training)
 x, y, targets = make_windows(training[0], statistics, sequence_length=64, stride=16)
 ```
+
+## Irregular observations (data pipeline only)
+
+The study concerns continuous-time dynamics, not imputation. `sampling.py` is
+the **only mask generator**. Create a mask once per recording/condition and pass
+that same object to each model's adapter. Acceleration and uplift share the mask.
+The generator never reads sensor or force values. Masks preserve file identity,
+split and source-row indexing; adapters reject mismatched masks.
+
+- Supported retention ratios: `1.0`, `0.8`, `0.6`. Remove exactly
+  `round(N*(1-retention))` samples, so the achieved fraction is within `0.5/N`.
+- **First and last samples always retained**, including the endpoints of a common
+  trimmed segment. Every missing interval has observed left/right endpoints;
+  there is no boundary extrapolation. Infeasible retention/burst counts on tiny
+  segments raise an error rather than silently changing the requested counts.
+- `random`: uniformly remove individual rows without replacement, excluding
+  both endpoint anchors. Masks are nested across retention levels for a fixed seed.
+- `bursty`: randomly place nonoverlapping **8-sample bursts** by default, with
+  at least one observed row between bursts. One shorter burst supplies any
+  remainder needed for the exact count. At the inferred 1 ms interval, eight
+  removed samples span eight missing grid cells (about 8 ms). The elapsed time
+  between observations surrounding such a burst is nine intervals. Burst length
+  is an explicit argument; burst masks at different retentions are not nested.
+- NumPy PCG64 is seeded by a stable SHA-256 digest of filename, starting row,
+  segment length, seed and pattern. Results do not depend on model RNGs or the
+  order recordings are processed. Record the NumPy version with diagnostics.
+
+The endpoint constraint changes the generated 80%/60% masks relative to the
+earlier first-anchor-only implementation, even with the same seed. Regenerate
+shared masks for all models; do not mix artifacts from the two protocols.
+
+Apply any **common segment selection first** (e.g. the existing 10% per-end
+trim), then generate one mask for that entire segment, never per sliding window.
+Do not use a mask from the untrimmed recording on a trimmed segment. The canonical
+raw recording remains unchanged. Use the same chosen segment for future ODEs.
+
+Fit normalization once on the complete, unmasked training segments, then freeze
+it across patterns, retention levels and models. Do not fit on retained-only or
+interpolated rows. The baseline adapter uses standard linear interpolation only,
+at the original timestamps and before the original windows are formed. Each
+missing value is weighted between its nearest retained left/right observations.
+Retained values remain untouched; force values are never used in interpolation.
+There is no alternative imputation, mask/time input channel, learned imputation
+or change to baseline models.
+
+**This is offline, non-causal preprocessing:** a right-hand sensor observation
+may occur at or after the force target time. The window indices remain unchanged,
+but this pipeline must not be described as strictly causal prediction. A future
+comparison with a causal continuous-time model must explicitly disclose this
+difference in available information; identical masks alone do not remove it.
+
+```python
+from src.sampling import observation_mask, retained_observations
+
+segment = training[0]  # same complete segment for every compared model
+mask = observation_mask(segment, 0.8, "bursty", seed=0, burst_length=8)
+x, y, targets = make_windows(segment, statistics, 64, stride=16, mask=mask)
+observations = retained_observations(segment, mask, statistics)
+```
+
+`x` is the interpolated, normalized two-channel baseline input. `observations` contains
+**only** retained `time_s, acceleration, uplift`, normalized with the same
+statistics and carrying original row IDs. Time is never reset or resampled, and
+force is never an observation input. All force values/timestamps stay complete in
+`segment.samples`; `y` and `targets` are identical across mask conditions.
+Window warm-up exclusions remain unchanged. A future ODE must score those same
+target rows, consume only retained observations at their original times (without
+filling), and state its observation-access protocol explicitly. No ODE
+implementation or model experiment is included yet.
 
 ## Models and evaluation
 
@@ -139,8 +214,56 @@ above; force tables are those returned by `evaluate`. Force comparisons reject
 different ordered target rows/ground truth. PDF output only; matching figures
 are overwritten. Plotting performs no model execution or data processing.
 
+`plot_sampling(recording, mask, filled, output_dir, ...)` shows three aligned
+panels: acceleration [m/s²], uplift [m], and complete contact-force truth [N].
+Units are documented from the reference paper in `data/README.md`. The x-axis
+uses **Distance [m]**, the original recorded coordinate, instead of inferred
+time. This is a display-only change: `time_s` and time-based interpolation stay
+unchanged. Input panels show the original signal, retained observations, lightly
+shaded missing cells, and the output of `baseline_data.linear_interpolate`.
+Only markers are thinned to at most 80 per input panel for legibility; no signal
+rows or masks change. Force is plotted in full without masking, interpolation,
+or missing-region shading. Use the same recording/start/points across conditions;
+axis limits depend only on the complete displayed signals, not the masks.
+The function does not create masks or interpolate itself. Seed-0 diagnostics, checks and their
+reproduction script are kept in `results/sampling_linear_seed0/`:
+
+```bash
+python results/sampling_linear_seed0/generate.py
+```
+
+The script checks the 24 CutFre20 recordings at all six pattern/retention
+combinations, with the established 10% end trimming, without training or model
+inference. It overwrites the six overview PDFs with the full trimmed example
+recording and adds four `_zoom.pdf` views for random/bursty 80%/60%. All zooms
+use one common interval around overlapping eight-row bursts in bursty 60%/80%,
+nearest the midpoint and selected without looking at signal values or
+interpolation errors. The legend labels
+are `Original`, `Retained`, and `Interpolated`; only the two sensors are filled.
+
+The same script writes lightweight sensor-distortion tables in that directory:
+
+- `interpolation_by_recording.csv`: MAE/RMSE in physical units, **only at removed
+  rows**, separately for each recording, condition and input channel.
+- `interpolation_summary.csv`: pooled errors by condition/channel and split.
+  `split=all` is a descriptive summary of all 24 recordings, not a new split.
+  Pooling weights individual removed samples, not per-recording RMSEs.
+- `interpolation_by_gap.csv`: the same errors grouped by consecutive missing
+  row count, with removed-sample and gap counts. No new burst lengths are tested;
+  the default bursty protocol has eight-row gaps plus an occasional remainder.
+
+These measure interpolation distortion, **not contact-force prediction error**.
+At 100% retention there are no removed rows: input identity is checked exactly,
+and missing-only MAE/RMSE are undefined (empty CSV cells), not reported as zero.
+`interpolation_checks.json` records checks, source/data/mask hashes, units via
+the tables, and selected figure rows; the previous `verification.json` is kept
+unchanged. The generator also verifies all existing mask hashes, unchanged
+complete force targets/timestamps, exact retained values, and clean-window identity.
+`src.evaluate.evaluate` remains the clean-checkpoint utility; no new experimental
+runner or irregular-model evaluation mode has been added in this step.
+
 The cleanup checks and clean-checkpoint reproduction results are recorded in
 [tests/BASELINE_VERIFICATION.md](tests/BASELINE_VERIFICATION.md). No models were
-trained and no remote actions were performed. Checkpoints and generated outputs
-are intentionally absent from the active tree; Git does not back up ignored
-datasets or results. Keep those separately if long-term recovery is needed.
+trained and no remote actions were performed. Result records are kept in Git.
+Git does not back up ignored raw datasets, checkpoints or bulk predictions;
+keep those separately if long-term recovery is needed.

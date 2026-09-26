@@ -2,7 +2,8 @@
 
 import numpy as np
 
-from src.data import Recording, normalize
+from src.data import INPUTS, Recording, normalize
+from src.sampling import validate_mask
 
 
 def trim_recording(recording, fraction):
@@ -14,12 +15,37 @@ def trim_recording(recording, fraction):
     return Recording(recording.name, recording.split, recording.samples.iloc[cut:n - cut].copy())
 
 
-def make_windows(recording, statistics, sequence_length, stride=1):
-    """X[k-L:k] -> F[k], excluding target-time sensors and all force history.
+def linear_interpolate(recording, mask):
+    """Interpolate raw sensors between retained observations at original times.
+
+    Both endpoints must be retained; no extrapolation or force values are used.
+    This recording-level preprocessing uses right-hand (future) observations,
+    so the irregular baseline input is non-causal even with preceding windows.
+    """
+    validate_mask(recording, mask)
+    t = recording.samples["time_s"].to_numpy(dtype=float)
+    if not np.isfinite(t).all() or not (np.diff(t) > 0).all():
+        raise ValueError("Interpolation requires finite, strictly increasing timestamps.")
+    keep = mask.to_numpy()
+    filled = recording.samples[INPUTS].copy()
+    for column in INPUTS:
+        values = filled.loc[mask, column].to_numpy(dtype=float)
+        if not np.isfinite(values).all():
+            raise ValueError("Retained sensor observations must be finite.")
+        if not keep.all():
+            filled.loc[~mask, column] = np.interp(t[~keep], t[keep], values)
+    return filled
+
+
+def make_windows(recording, statistics, sequence_length, stride=1, *, mask=None):
+    """X[k-L:k] -> F[k], excluding target-time input rows and all force history.
 
     Call separately for each already-split recording. L and stride are explicit
     adapter settings, not properties of the canonical dataset. Returns float32
     X/y and unscaled target rows with recording/split identity and true row IDs.
+    An optional shared mask linearly interpolates sensors BEFORE windowing.
+    Interpolation can use retained sensors at/after the force target time.
+    Statistics are fixed from complete training data, never refit after masking.
     """
     frame = recording.samples
     if (not isinstance(sequence_length, int) or not isinstance(stride, int)
@@ -31,6 +57,9 @@ def make_windows(recording, statistics, sequence_length, stride=1):
     if not (np.diff(frame.index.to_numpy()) == 1).all():
         raise ValueError("Baseline windows must not bridge omitted source rows.")
     x, y = normalize(recording, statistics)
+    if mask is not None:
+        filled = linear_interpolate(recording, mask).to_numpy(dtype=float)
+        x = (filled - statistics["input_mean"]) / statistics["input_std"]
     positions = np.arange(sequence_length, len(frame), stride)
     windows = np.stack([x[k - sequence_length:k] for k in positions]).astype(np.float32)
     targets = frame.iloc[positions][["time_s", "distance_m", "force_N"]].reset_index()

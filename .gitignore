@@ -40,6 +40,8 @@ logs/
 data/*
 !data/README.md
 
-# Generated results (keep the directory)
-results/*
-!results/.gitkeep
+# Keep result records, including run logs and training histories, in Git.
+# Checkpoints, caches and bulk prediction arrays remain ignored above.
+!results/**/logs/
+!results/**/*.log
+!results/**/*.history.csv

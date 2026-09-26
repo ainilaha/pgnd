@@ -1,0 +1,367 @@
+{
+  "purpose": "Pre-distance-change clean input reference; not model scores",
+  "cutoff": 20,
+  "cut_percent_each_end": 0.1,
+  "sequence_length": 64,
+  "train_stride": 16,
+  "evaluation_stride": 1,
+  "normalization": {
+    "input_mean": [
+      0.0013599267869852706,
+      0.07942407069803016
+    ],
+    "input_std": [
+      5.327149721546923,
+      0.019491810393643165
+    ],
+    "force_mean": 183.58088002838994,
+    "force_std": 39.71405445306965
+  },
+  "source_sha256": {
+    "baseline_data.py": "1736a44635010f77354629092b6751c38d704c7e8d568320a8e3e3fb9123351e",
+    "baselines.py": "cb2334bb9ac7680d1cf458639e6fd37ec1888d35d4e2438b33ecf6fd66376665",
+    "data.py": "afccf128b4a621fb7f066c753b5e11debefdbf75b076d0399821ed6877a14401",
+    "evaluate.py": "5dc60abd8e3f626db698e7191787cb4e9c8d9c388cb63c803ebd57e55c4ef61c",
+    "metrics.py": "f467bc123b59f098577dfded82da8c222d2eda5d09da5d70c03784a2d969bc02",
+    "plot.py": "d86e90a2d5e93804519118351e9f22e97c0a604b489575fd6c1dcd4893926847",
+    "sampling.py": "85a559b55eba6e39484d7cd88dec9faf7d8f42e00422fc004b90a9f475915800"
+  },
+  "records": [
+    {
+      "file": "V300_Case1_CutFre20.xls",
+      "split": "train",
+      "shape": [
+        867,
+        64,
+        2
+      ],
+      "x_sha256": "130d71f7f0b0bc9025e4a6a46b1c7aae10460797d178fccb14adcaf3a6187439",
+      "y_sha256": "6627fea74dc3c58a3d2dbdff3888ed8054c90c6836bcde180501763d6d17fbca",
+      "rows_sha256": "19226e0d9d448e376802d8827e5633a31284a275549abbd16f7814758e82275f",
+      "distance_sha256": "0a585a67c1aedef6b67f6aa9ec2d1bfd6299076a592da9c0d83122b8a0c98576",
+      "force_sha256": "235247cbb910a945645a6ff5b43769e4f87195a9b41d5be26ec2bd4c1f720074"
+    },
+    {
+      "file": "V300_Case2_CutFre20.xls",
+      "split": "train",
+      "shape": [
+        780,
+        64,
+        2
+      ],
+      "x_sha256": "75e406d2192a72a5e95f892db52e01510fc73573ae0b645c25f363821d2ba1a0",
+      "y_sha256": "92abaf054a34e70475e951c13b6f3135bc6b54e05858a8023fccb3e29d291729",
+      "rows_sha256": "0318b4cbd7dd81936e96d457fe32414dd959f01eb2cb2f320d3912c8a8271519",
+      "distance_sha256": "d699f04cc983720918aacef45afdb1c78755cc91f40f1e11d74694e054cc5902",
+      "force_sha256": "aa6e39c036460d9003031347b65be56c7f68850bb697ab84e673a1cb2b976cdf"
+    },
+    {
+      "file": "V300_Case3_CutFre20.xls",
+      "split": "train",
+      "shape": [
+        954,
+        64,
+        2
+      ],
+      "x_sha256": "6e4f8cbe417dea882a99af5d80fe3469d2b6f4315fb7701170dcd18ca59a1ffe",
+      "y_sha256": "61005b0a744e260eb62854ac4b138e5373e4a8adf5fa2aabee4ffd99869517de",
+      "rows_sha256": "b96112538030fad07bbebab22e3d3080aad3944f3ad036ebbb792ec8ea26cfe9",
+      "distance_sha256": "94a9eb41936335aa05fbe2e26aa398299290d8c2c225e65f865f2c1de0b713ed",
+      "force_sha256": "3d587f7d136eb1734a976d84d280cc9c006394314fd9656131658b3073d35555"
+    },
+    {
+      "file": "V300_Case4_CutFre20.xls",
+      "split": "train",
+      "shape": [
+        954,
+        64,
+        2
+      ],
+      "x_sha256": "0dfd992ea93a3c63e7d2f47b819012986e836c5db7519091b8bb62087077ec1c",
+      "y_sha256": "e337e7028a0993f61caf518fc434222fad61037ae486ee640df4a15bc9a99b19",
+      "rows_sha256": "b96112538030fad07bbebab22e3d3080aad3944f3ad036ebbb792ec8ea26cfe9",
+      "distance_sha256": "94a9eb41936335aa05fbe2e26aa398299290d8c2c225e65f865f2c1de0b713ed",
+      "force_sha256": "4c0bcf337fe73c016b4efce4353e688c7b7d89b0b8b521648e773b802b837a54"
+    },
+    {
+      "file": "V300_Case5_CutFre20.xls",
+      "split": "validation",
+      "shape": [
+        15249,
+        64,
+        2
+      ],
+      "x_sha256": "f6da6a087fb44fc9341365a0ceba3c32d524c5208666292030d863bc9ec9ebba",
+      "y_sha256": "5e759a6a2935c1a2789ee495878231102bf81648039e334e93b0a7b2ff1b6b31",
+      "rows_sha256": "5f188a29df6e580a92457c832b75c0e9c61cefb12480f08c462438eceee491c9",
+      "distance_sha256": "cb1279515e9718bcb776b7c455bd7585a066f1ca8ada9b28d4b6bd11998147a8",
+      "force_sha256": "af3dc6e369d78eababad140190d70f8202a0d65bd622e4b3d7dbce6d73837eba"
+    },
+    {
+      "file": "V300_Case6_CutFre20.xls",
+      "split": "validation",
+      "shape": [
+        13857,
+        64,
+        2
+      ],
+      "x_sha256": "ab1f8ba32994323129416f48d4ddb68ef813bc0c92a6ba2b5884a357bbd49eef",
+      "y_sha256": "66579b0d70122fde0b978395dc2d0c683825b788a3c832f3dc812d0cdbb610c7",
+      "rows_sha256": "eacbc230aebd14932736b60e5ab586a7c8cde7f3aa8c09c72b4280e3e402c52b",
+      "distance_sha256": "2041b8ef79b52c73be1f0d77f2bdaa0926684c816857f94989ddcefc35ae71db",
+      "force_sha256": "ec14f43bcac3ed4aa25df6e1b09119c753537d8d016704cff1089993b05095da"
+    },
+    {
+      "file": "V300_Case7_CutFre20.xls",
+      "split": "test",
+      "shape": [
+        12465,
+        64,
+        2
+      ],
+      "x_sha256": "ea07f9d91b30f51d8aed3dd7888cdef90e65e816a99ad6fef5955c43608f539b",
+      "y_sha256": "d4e4e9fba5e39a950332634b4acfb5bf78ebf5552c7e2fac12dbdac8d7f1f1f2",
+      "rows_sha256": "6e292ac6c3b8e8cf105af0fe7f976c2cccc3e2db0104f6237cdf18c308fa2a02",
+      "distance_sha256": "e3c91a65b0f5deb4d1b9e4f49f9001f6b44e1eba61a4bdbbc7c14e28b2717337",
+      "force_sha256": "446c0fd0dfb325802904469bdcaebe022b961118419786529be025b2ea777a87"
+    },
+    {
+      "file": "V300_Case8_CutFre20.xls",
+      "split": "test",
+      "shape": [
+        13857,
+        64,
+        2
+      ],
+      "x_sha256": "962f20301158457f2beac533e6c432f0fb59c695528de06df2ab23bfe1685575",
+      "y_sha256": "38ab06f64fcec605c3658239e016a042478e4a3ce8a7c15153e1bb79a85b245f",
+      "rows_sha256": "eacbc230aebd14932736b60e5ab586a7c8cde7f3aa8c09c72b4280e3e402c52b",
+      "distance_sha256": "2041b8ef79b52c73be1f0d77f2bdaa0926684c816857f94989ddcefc35ae71db",
+      "force_sha256": "d545a4ee189b9771b2d4abe5bc84495bfec17b47a78d1e377ed28f7fb49f53be"
+    },
+    {
+      "file": "V350_Case1_CutFre20.xls",
+      "split": "train",
+      "shape": [
+        742,
+        64,
+        2
+      ],
+      "x_sha256": "aff4baf9ee4ff4d4d4a6aae9e05d3dbcad9a11dc992b00c27efa26dfad087512",
+      "y_sha256": "5295515653629331ee61527e7bd5673412c8c476c402e9615345bb3e87fc2715",
+      "rows_sha256": "a275cdd24b0db19dfba395a312b45b5ced2996059daf57d4e96a522a58f4ad76",
+      "distance_sha256": "02cb96e92b275f23968822bd252ef639c2d2ecddb3100d8bdc72dfedc43c8383",
+      "force_sha256": "222cb51f4d29c70af9b709282ae29e4d20c71d791f447cb6c08207893cc73887"
+    },
+    {
+      "file": "V350_Case2_CutFre20.xls",
+      "split": "train",
+      "shape": [
+        668,
+        64,
+        2
+      ],
+      "x_sha256": "766e9247e5cc03f5cd5575d9738ddcf33a58ed66ecdc093f457223a9dbcf47c2",
+      "y_sha256": "558768f9681e0943af71d550e0ce50222a47f05bdfcab5a295394ac36d352c2e",
+      "rows_sha256": "5cc92516f11f8bcec5a939d3feea7e169f971f629da0e7088cc6d4fa6654ca82",
+      "distance_sha256": "5d34ea63738e4f7e086d98cee99288b98d8c08e0e93d62314080c1fb4f22ad64",
+      "force_sha256": "d36a50b135d4545b4a1c8edd206b4ba259f5dfbfd5cdef6756bf4aa81f8ff8bb"
+    },
+    {
+      "file": "V350_Case3_CutFre20.xls",
+      "split": "train",
+      "shape": [
+        817,
+        64,
+        2
+      ],
+      "x_sha256": "eba058bf88770fa82c86a607b5ea45cae981b9ae76105e02999627a39471c5d4",
+      "y_sha256": "91858da44aafa61f0f8276ca472af56036fabe2dd6fdaadbf4c7bc8656051a03",
+      "rows_sha256": "0e768b9a81b2dbd4a82b226aba61675a0b9680d9cb273992af6f41e87635152b",
+      "distance_sha256": "9bb2cf437173a30c449ba405ee363b62fb792cb8fdbcb3c83e48e14c1c7508e2",
+      "force_sha256": "ad07ce2d1e59c81963a19cf40f8020f7093dc1641e40f3c8baf0e0a174635065"
+    },
+    {
+      "file": "V350_Case4_CutFre20.xls",
+      "split": "train",
+      "shape": [
+        817,
+        64,
+        2
+      ],
+      "x_sha256": "74f29e87790cd8095271b4d321247befd697109c134bfb5c0fa0f99737da4f36",
+      "y_sha256": "cf7ffd3c881a476594f3b23003b25af284ea074fd06f12fcf32a9c5185e906d2",
+      "rows_sha256": "0e768b9a81b2dbd4a82b226aba61675a0b9680d9cb273992af6f41e87635152b",
+      "distance_sha256": "9bb2cf437173a30c449ba405ee363b62fb792cb8fdbcb3c83e48e14c1c7508e2",
+      "force_sha256": "8ac256152c00f4651f2f9bcdac3a10d75ccbfab17a0259941a3331541c29b53c"
+    },
+    {
+      "file": "V350_Case5_CutFre20.xls",
+      "split": "validation",
+      "shape": [
+        13062,
+        64,
+        2
+      ],
+      "x_sha256": "ff0fae5fa6dcad6a384425c3c629f2c0624024934c27bede1f242b42ee44bdb5",
+      "y_sha256": "a068d5c136a9b5f25fa3b38ee4397870ee4d6403dfecf92e108b72f985e46ad2",
+      "rows_sha256": "f677083d0c967ebf0ab99bf37cf55ae6c8440567bb03e4f113d346d131946413",
+      "distance_sha256": "f4a8ed99d28a20ee00214c8e038ef748477a0e6fd283b3af1972abfde1d1a06a",
+      "force_sha256": "ef04cb98ea1fdd9f58fcaf55a48e9d1ddc0351ed9dd37f8af4a9dfeef4392193"
+    },
+    {
+      "file": "V350_Case6_CutFre20.xls",
+      "split": "validation",
+      "shape": [
+        11869,
+        64,
+        2
+      ],
+      "x_sha256": "e319f05fe39f1ec3ca0ef55531d2d7909ca03699f50a3d873d9c973f55869e2d",
+      "y_sha256": "0f226f3c19c8b3514da0cf30ebddc998228eeb7a42f38bc6a6f8c940bd089b42",
+      "rows_sha256": "f56a4043d668732004b1da6f86797afec7d57f45aaa2437b67c48409fdb22b06",
+      "distance_sha256": "8bb9a5f37f5bda909a8440c1a41c8818099d91eaf25a1b8ee41090e74008b7e9",
+      "force_sha256": "508d7439cbf1f6dccf5acf961628d5528d7ac14d2adeeaf3b82b641de4a91ab6"
+    },
+    {
+      "file": "V350_Case7_CutFre20.xls",
+      "split": "test",
+      "shape": [
+        10675,
+        64,
+        2
+      ],
+      "x_sha256": "aaacdc1d64b1044fcfcc5d3fcf770d8bebad9765a4a0c2ff2fc05c1b3a8bc6a9",
+      "y_sha256": "ce90b052ed1f3c35b9170f75f2f94292908730f82c497b324b7b6ddbf936343a",
+      "rows_sha256": "b432d33d0f3487954977de0d852d9a450cf1a930e061b9fdcc814c9f325577d1",
+      "distance_sha256": "ae521a892a5e67e075680c11684bb807f2fcaefd552df2a034269c717e757248",
+      "force_sha256": "6677fab669061271991584ff4df8dc8edf4897e4ad6c56ed02e3fc8f48369594"
+    },
+    {
+      "file": "V350_Case8_CutFre20.xls",
+      "split": "test",
+      "shape": [
+        11869,
+        64,
+        2
+      ],
+      "x_sha256": "fcd6cfd54703e373dd860c0173f665f21c441f5042c3df2571631e822a17c24a",
+      "y_sha256": "a412d2e3946d65164cca6f3acb49dea05447d44f0ed8f770ae872a0a14f7140a",
+      "rows_sha256": "f56a4043d668732004b1da6f86797afec7d57f45aaa2437b67c48409fdb22b06",
+      "distance_sha256": "8bb9a5f37f5bda909a8440c1a41c8818099d91eaf25a1b8ee41090e74008b7e9",
+      "force_sha256": "26b2fe81d4e7f1f79bc8c81b10245fb172ca1056c53647ecabead09de00ff7ce"
+    },
+    {
+      "file": "V380_Case1_CutFre20.xls",
+      "split": "train",
+      "shape": [
+        683,
+        64,
+        2
+      ],
+      "x_sha256": "6b88fc9afca7b174271af2c94bde7e525a734030adf28c80bef90c6379cfea0e",
+      "y_sha256": "f0820fedb48566bc2a752e75e3448f3e4a493c46f979e392286af10effee62b9",
+      "rows_sha256": "304acf597e1f6cce4f11826413660d097db02b7612bb870db72ffdcf2519c79b",
+      "distance_sha256": "64d8c4ceb85ebb97f6f46c8e802953bbdf09fff6ab4c764a1561e88287cd4030",
+      "force_sha256": "4feef67ac06bf6d1773bc971f212c6a81e0bad0b340595a46e454a8b79d98ed0"
+    },
+    {
+      "file": "V380_Case2_CutFre20.xls",
+      "split": "train",
+      "shape": [
+        615,
+        64,
+        2
+      ],
+      "x_sha256": "f760cf512ba9a1682559b0ec7f463f05fcabe1e038cce5896fc2716df8b98724",
+      "y_sha256": "1dc800b28b3f67240da2a523086edbee30207ec16b41a48280352a7fdbbe4c72",
+      "rows_sha256": "ea625e04fb2e7bf87c6dc8f9c6b748950c7a2868e25f0843bcf13d9d3f5a9cf0",
+      "distance_sha256": "2090235a81f8e2026ef9220c39dbd80c89126939c23dff2a985b20d81f9be59f",
+      "force_sha256": "f7bee97f92dba1ac42fb3e70ee40951b15dd73aa7be1c8a3fce5d29807a72091"
+    },
+    {
+      "file": "V380_Case3_CutFre20.xls",
+      "split": "train",
+      "shape": [
+        752,
+        64,
+        2
+      ],
+      "x_sha256": "e3bd0bfa1a6605b05e5f33945b3b31d3fd50aca3bd68209ae92732754fce6a03",
+      "y_sha256": "29a3a9bcb3991b205dff39e7eb73ce6a85204cce5ee30d45c4b3b94e5de8cfde",
+      "rows_sha256": "cff606dc2ef02bf61011c17d1b0ceae7b2f422cbdbd29abf2bd01dc425143bfd",
+      "distance_sha256": "2f00d884aa034969be99d37671cc75f3bbaf0f755eee8e780378430edf1ca545",
+      "force_sha256": "4e2abb8fe6176f6bffefdd3a4c80de4777e8dc9ff1404526199cb56d5bfc99a0"
+    },
+    {
+      "file": "V380_Case4_CutFre20.xls",
+      "split": "train",
+      "shape": [
+        752,
+        64,
+        2
+      ],
+      "x_sha256": "bb82a94d0f414c08c9526e8c0a18f843c7af5e5a647d37b5a894e2a0db95eeba",
+      "y_sha256": "721d2fe2d7cde41d0b484cae070c3aed3181636c82891d9949b45c0424d4e49e",
+      "rows_sha256": "cff606dc2ef02bf61011c17d1b0ceae7b2f422cbdbd29abf2bd01dc425143bfd",
+      "distance_sha256": "2f00d884aa034969be99d37671cc75f3bbaf0f755eee8e780378430edf1ca545",
+      "force_sha256": "448793b9ec6583cbf0c57db3ef13f09d9a73d0c9c6e039d621e015ea4df1434c"
+    },
+    {
+      "file": "V380_Case5_CutFre20.xls",
+      "split": "validation",
+      "shape": [
+        12025,
+        64,
+        2
+      ],
+      "x_sha256": "48f5714d4dca09c5d3e388893fec66bb448c7c03d5bc58c922461128f51af7d1",
+      "y_sha256": "642a78573bd6499d213fafe65fad75852401fc088f1e77a6ba06e53d8555e8b3",
+      "rows_sha256": "b3ad36012bd239b1c3e60db9986198727411df20ee9699e8aa655c4e4c209edd",
+      "distance_sha256": "fb9ebfea8bc4f05e5495e5b2c51969a8ff5a59e70de25a66c480c75eebd2287e",
+      "force_sha256": "4860d4509b36469815bbceacc99940409308f2b2e148f25353e32722b52a8e94"
+    },
+    {
+      "file": "V380_Case6_CutFre20.xls",
+      "split": "validation",
+      "shape": [
+        10927,
+        64,
+        2
+      ],
+      "x_sha256": "d80a965a345a2922ea2580ecf27c042dd792b7b62f11f106f8fd62352730748d",
+      "y_sha256": "ff616e6d4ee0b0258ca84e131697b1d1ad3b3e65201a5f08937e0255392d3a83",
+      "rows_sha256": "e46c424299de474fbbb73d17ae36115231d5eaae3cade2f8a05c094e9ea485ce",
+      "distance_sha256": "097d007f84ba9a34958994e1d8b7016c9591bc27337cb80e03678c98d27d3c83",
+      "force_sha256": "fd81bb17e69feade0d34785b3b331422199460de65fcd2518e8de11443317bb6"
+    },
+    {
+      "file": "V380_Case7_CutFre20.xls",
+      "split": "test",
+      "shape": [
+        9828,
+        64,
+        2
+      ],
+      "x_sha256": "a9693f62e0bf2a751067894710794f7610522f5221feb51ce2eb9896ae44a36f",
+      "y_sha256": "bb5102c68f0a1392ee45a30347c8b9363557e43e1f247679ce515daf0cfb4c3b",
+      "rows_sha256": "b38e462e5b3028e2770efddbae7f4028d42d81453c08f4cf581be4f62c994b95",
+      "distance_sha256": "71e5483f5af95d43ce71a01e6dd09ef7d74321291f63208fda9f315dd99c64ab",
+      "force_sha256": "ac95ab263c071a6321f246c852b3f01a734547c645f05ca9175ffd7d88bbd575"
+    },
+    {
+      "file": "V380_Case8_CutFre20.xls",
+      "split": "test",
+      "shape": [
+        10927,
+        64,
+        2
+      ],
+      "x_sha256": "5e0338d73cf30b02cbb027f3e009320c936418f121a0b75b6783064ca034be06",
+      "y_sha256": "36f461be0c6290b3ae1c3aded15fe149ee9f8c0415a5c295c2982b5947640c89",
+      "rows_sha256": "e46c424299de474fbbb73d17ae36115231d5eaae3cade2f8a05c094e9ea485ce",
+      "distance_sha256": "097d007f84ba9a34958994e1d8b7016c9591bc27337cb80e03678c98d27d3c83",
+      "force_sha256": "e4f341b8dbb057bad1b422acb26fa38f6927108f8b237ebff8d926232bbb4c39"
+    }
+  ]
+}

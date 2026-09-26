@@ -5,9 +5,10 @@ This is a small research foundation, not a framework. Read `README.md` and
 
 - Keep the active code flat and manually auditable. No factories, registries,
   configuration frameworks, generic trainers, empty modules, CI or Docker.
-- The active scope is complete simulated recordings, verified conventional
+- The active scope is complete simulated recordings, shared irregular-observation
+  masks, a simple linear-interpolation baseline adapter, verified conventional
   baselines, normalization, metrics and plotting. Do not add PGND/Neural ODEs,
-  irregular sampling, imputation or experimental modes without a new request.
+  alternative imputation strategies or model experiments without a new request.
 - Git history preserves old exploratory implementations. Do not recreate a
   `legacy/` directory or copy historical code into the active tree.
 - Preserve raw files and manuscript sources. Never change scientific behavior
@@ -15,11 +16,12 @@ This is a small research foundation, not a framework. Read `README.md` and
   model architecture, initializers, optimization, checkpoint selection or metrics.
 - Before a requested experiment, declare the hypothesis, matched controls,
   validation criterion and bounded run budget. Negative results count as evidence.
-- Generated results belong in ignored `results/`. Do not overwrite scientific
+- Keep result records in version-controlled `results/`; checkpoints, caches and
+  bulk prediction arrays remain ignored. Do not overwrite scientific
   artifacts or delete them without explicit authorization. Figure regeneration
   may overwrite matching PDFs, not unrelated files or source data.
-- Do not train or launch dataset experiments locally. Synthetic tests and
-  explicitly requested read-only checkpoint reproduction checks are allowed.
+- Do not train or launch model experiments locally. Synthetic tests and explicitly
+  requested read-only data-pipeline diagnostics/checkpoint checks are allowed.
 - Remote sync/training needs a current explicit request. Old credentials are
   not standing authorization. Never store credentials in files, commands or logs.
 - Do not change `manuscript/` merely to match code or scores. Its proposals are
