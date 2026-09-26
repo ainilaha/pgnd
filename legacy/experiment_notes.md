@@ -543,3 +543,146 @@ pgnd/
 ```
 
 No datasets, legacy scientific references or baseline definitions were removed or rewritten during PGND implementation. The subsequent manuscript revision is documented separately above.
+
+---
+
+## Priority 0–3 instructions archived on 2026-09-25
+
+The following was the root operating guide before the missing-block pilot.
+P1–P3 model definitions now live in `legacy/pgnd_experiments.py` as
+`AblationPGND`; the evaluator recognizes historical model_options automatically.
+Default PGND numerics are unchanged. The active trainer no longer exposes
+`--initialization`, `--warmup-steps`, `--dynamics` or `--no-residual`.
+Use each completed run's frozen `source/` for historical retraining, not the
+cleaned trainer. The old `results/priority123_plan/` files are retained as
+provenance and are no longer launch instructions for the current source.
+No checkpoints, data, histories, predictions, PDFs or scripts were deleted.
+
+P1 found a context benefit shared by PGND and discrete baselines, not an
+accuracy gain from history initialization. P2 found no residual benefit in
+this seed-0 screen. P3's supplied table favors structured/no-residual among
+the ODE controls, but not clearly over CNN–GRU; its full artifacts have not
+been audited here. These findings do not promote a variant or establish
+significance. Retain the default for the separately declared robustness pilot.
+
+## Priority 0: diagnose before retraining
+
+Run frozen-checkpoint diagnostics **on the server**, from `/root/pgnd`. This
+command does not train, update weights, or select a new checkpoint. It retains
+the checkpoints' original tail-validation split. Use a new output directory;
+put PGND first so paired differences mean **PGND minus the baseline**.
+
+```bash
+RUN=results/20hz_seed0_readout_20260925
+python -m src.evaluate \
+  "$RUN/pgnd/pgnd.best.pt" "$RUN/cnn_gru/cnn_gru.best.pt" \
+  "$RUN/gru/gru.best.pt" "$RUN/lstm/lstm.best.pt" "$RUN/rnn/rnn.best.pt" \
+  --split validation --diagnostics --device cuda --threads 1 --preload-data \
+  --output-dir results/priority0_frozen_validation
+```
+
+Besides the usual full-validation metrics/predictions, this writes:
+
+- `probe_targets.csv`: up to 16 evenly spaced targets **per recording**, chosen
+  without inspecting errors; all models use these same targets.
+- `<run>.probe.csv`: probe MSE, residual/weighted penalty, separate prediction
+  and weighted-residual gradient norms/cosine, and parameter-group gradients.
+  PGND also reports q/v and dynamics-term RMS, latent power contributions,
+  damping/stiffness eigenvalue ranges, and forward vector-field evaluations.
+  These are sample-grid diagnostics, not physical energy or identified parameters.
+- `<pgnd-run>.solver.csv`: saved solver, half/quarter-step RK4 and tight Dopri5,
+  with probe RMSE, changes from the saved/previous prediction in N, NFE and single-batch
+  time. RK4 tolerances do not refine its fixed step. This is not a latency benchmark.
+- `paired_cases.csv`: case-balanced RMSE differences, averaging recording MSE
+  within each case before averaging cases. The paired bootstrap resamples entire
+  cases, keeping speeds/cutoffs together (2,000 draws, seed 0). This differs from
+  pooled-window RMSE. Intervals require at least five cases; they are exploratory,
+  conditional on selected fits, and exclude seed and validation-selection uncertainty.
+- `diagnostics.json`: checkpoint/data/source hashes, probe policy and runtime
+  versions. Existing checkpoints and results are never overwritten.
+
+Check for non-finite values, missing learning signals, residual/physics-term
+imbalance and solver sensitivity **before** considering a method change. As a
+screening flag, investigate probe RMS solver changes above 0.1 N or 1% of saved
+probe RMSE; these are predeclared practical thresholds, not a convergence proof.
+Small residual magnitude is not proof of physics adherence (latent rescaling
+can change this penalty). Positive driven latent energy rate is not itself a bug.
+
+### Whole-case reference protocol (not launched)
+
+After the frozen audit, the bounded reference is five models (PGND-0, CNN–GRU,
+GRU, LSTM, RNN) × seeds 0–4: **25 runs maximum**, no architecture/LR search.
+This earlier replication plan is now on hold in favor of the requested
+Priority 1–3 diagnostic screen below; do not launch both automatically.
+Keep 20 Hz, all three speeds, L=16, stride 16, 100 epochs, batch 128 and the
+optimizer/PGND settings above. Select only by validation prediction MSE.
+
+For this **new** protocol use cases 1–4 for training, cases 5–6 for whole-case
+validation, and cases 7–8 only as the previously examined development test.
+This deterministic case-label choice is not an error-based selection. New
+training commands must replace the old training regex and add:
+
+```bash
+--train-pattern 'V(300|350|380)_Case[1-4]_CutFre20\.xls$' \
+--validation-pattern 'V(300|350|380)_Case[5-6]_CutFre20\.xls$' \
+--test-pattern 'V(300|350|380)_Case[7-8]_CutFre20\.xls$' --diagnostics
+```
+
+`--validation-pattern` replaces the tail split (ignores `--validation-fraction`),
+uses all retained training rows and refits training-only scalers. It rejects
+case overlap across any partitions, including other speeds/cutoffs. Its distinct
+protocol tag prevents comparison with old tail-split checkpoints. This is an
+explicit split/statistics change, **not** a reproduction of old scores.
+
+Training `--diagnostics` logs a fixed up-to-64-window training probe each epoch;
+no probe optimizer updates occur. `probe_*` losses are end-of-epoch subset losses,
+not the online whole-epoch `train_mse_scaled`. `probe_seconds` is separate from
+training/validation time. Evaluation reports parameter counts, total budget and
+selected-checkpoint update counts, and logged times; concurrent timings are not
+isolated speed benchmarks. Evaluate seeds separately, then report paired seed
+differences and mean/std alongside every case's errors. Seeds are optimization
+replicates, not additional independent physical cases. With only two held-out
+cases, do not claim a reliable condition-generalization confidence interval.
+Fresh simulation cases remain necessary for confirmatory testing.
+
+## Priorities 1–3: controlled diagnostic screen
+
+The bounded [protocol](results/priority123_plan/protocol.md) and plain
+[server script](results/priority123_plan/run.sh) define **12 seed-0 runs**:
+eight for context/initialization, two for residual controls, two for mechanics.
+Only these two plan files are exempt from the `results/` Git ignore; actual
+run outputs remain ignored. Transfer the plan files with the updated code.
+They are experimental controls, not a new preferred PGND implementation.
+Review the Priority 0 probe/solver files first; its accuracy table alone is
+not a passed diagnostic audit. No local training is needed.
+
+```bash
+cd /root/pgnd
+RUN=results/priority123_seed0_20260925  # must not already exist
+bash results/priority123_plan/run.sh p1 "$RUN"
+# Inspect validation results/diagnostics before running the next stage.
+bash results/priority123_plan/run.sh p2 "$RUN"
+bash results/priority123_plan/run.sh p3 "$RUN"
+```
+
+Each stage includes common validation evaluation and PDF figures. Whole-case
+validation uses the split above; `--target-start 64` matches training AND held-out
+targets at L=16/64. This changes eligible targets and is not an old-score replay.
+Without the flag, historical window construction is unchanged. Evaluation
+accepts differing L only with matching explicit anchors and all other data,
+budget and checkpoint-selection guards; it supplies each model its own context.
+
+PGND-only controls: `--initialization delayed|history --warmup-steps 8`,
+`--no-residual` (remove network), `--residual-weight 0` (keep it unpenalized),
+and `--dynamics second_order|first_order` (unpenalized generic ODE fields).
+First-sample structured PGND remains the default and old checkpoints still load.
+History initialization starts integration at the end of its observed prefix,
+with a same-start single-observation control. The plan records parameter-count
+and initialization differences rather than claiming exact capacity matching.
+
+`--diagnostics` additionally writes `*.residual_scaling.csv` for PGND with a
+residual: a frozen reparameterization checks prediction invariance while changing
+the penalty. It does not normalize latent states or alter saved weights. Generic
+ODE controls have state/gradient/solver diagnostics but no spurious mechanical
+energy interpretation. Report negative/mixed outcomes; a single seed and two
+validation cases cannot establish significance or an advantage of continuous time.

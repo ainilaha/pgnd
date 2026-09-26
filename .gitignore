@@ -32,3 +32,8 @@ data/*
 # Generated results (keep the directory)
 results/*
 !results/.gitkeep
+# Keep the bounded ablation instructions, not any experiment outputs.
+!results/priority123_plan/
+results/priority123_plan/*
+!results/priority123_plan/run.sh
+!results/priority123_plan/protocol.md

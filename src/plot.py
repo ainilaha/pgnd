@@ -104,9 +104,23 @@ def main():
     table = pd.read_csv(args.evaluation_dir / "comparison.csv")
     if table.empty or "run" not in table or not table["run"].is_unique:
         raise ValueError("Expected distinct run names; regenerate evaluation with the current evaluator.")
-    labels = [LABELS.get(row.model, row.model) if table.model.is_unique else row.run
-              for row in table.itertuples()]
-    colors = [COLORS.get(model, "#0072B2") for model in table.model]
+    missing = table["missing_block"] if "missing_block" in table else pd.Series([0])
+    if missing.nunique() != 1:
+        raise ValueError("Compare models under one common missing-block condition per evaluation directory.")
+    labels = []
+    for row in table.itertuples():
+        ablation = row.model == "pgnd" and (
+            getattr(row, "initialization", "first") != "first"
+            or getattr(row, "state_mode", "window") != "window"
+            or getattr(row, "dynamics", "structured") != "structured"
+            or not getattr(row, "residual_enabled", True)
+            or getattr(row, "residual_weight", 0.001) != 0.001)
+        augmented = getattr(row, "train_max_missing_block", 0) > 0
+        labels.append(LABELS.get(row.model, row.model)
+                      if table.model.is_unique and not ablation and not augmented else row.run)
+    # Multiple contexts/ablations of the same model need distinct colors too.
+    colors = ([COLORS.get(model, "#0072B2") for model in table.model] if table.model.is_unique
+              else [plt.get_cmap("tab10")(i % 10) for i in range(len(table))])
     histories, predictions = [], []
     for run in table["run"]:
         histories.append(pd.read_csv(args.evaluation_dir / f"{run}.history.csv"))
@@ -126,8 +140,9 @@ def main():
                          "axes.spines.right": False, "pdf.fonttype": 42})
     output_dir.mkdir(parents=True, exist_ok=True)
     plot_losses(histories, labels, colors, output_dir)
-    plot_metrics(table, labels, colors, output_dir)
-    plot_force(predictions, labels, colors, recording, args.start, args.points, output_dir)
+    condition_labels = [f"{label} (gap {int(missing.iloc[0])})" for label in labels] if missing.iloc[0] else labels
+    plot_metrics(table, condition_labels, colors, output_dir)
+    plot_force(predictions, condition_labels, colors, recording, args.start, args.points, output_dir)
     print(f"Saved training_loss_curves, validation_loss_curves, metric_comparison "
           f"and force_predictions (PDF) to {output_dir}")
 
